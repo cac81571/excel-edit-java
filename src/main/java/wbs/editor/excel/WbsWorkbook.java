@@ -419,7 +419,7 @@ public final class WbsWorkbook implements AutoCloseable {
         if (cell == null) {
             cell = row.createCell(column);
         }
-        if (sample != null && sample.excelDate) {
+        if (sample != null && sample.excelDate && dateRow) {
             if (sample.style != null) {
                 cell.setCellStyle(sample.style);
             }
@@ -461,9 +461,9 @@ public final class WbsWorkbook implements AutoCloseable {
             return null;
         }
         try {
-            if (isExcelDate(cell)) {
-                LocalDate date = excelDate(cell);
-                return date == null ? null : DateColumn.exact(column, date);
+            LocalDate excel = excelDate(cell);
+            if (excel != null) {
+                return DateColumn.exact(column, excel);
             }
         } catch (RuntimeException ignored) {
             return null;
@@ -472,22 +472,48 @@ public final class WbsWorkbook implements AutoCloseable {
     }
 
     private boolean isExcelDate(Cell cell) {
-        CellType type = cell.getCellType();
-        if (type != CellType.NUMERIC && type != CellType.FORMULA) {
-            return false;
-        }
-        return DateUtil.isCellDateFormatted(cell);
+        return excelDate(cell) != null;
     }
 
     private LocalDate excelDate(Cell cell) {
-        if (cell.getCellType() == CellType.FORMULA) {
+        CellType type = cell.getCellType();
+        if (type == CellType.FORMULA) {
             CellValue value = evaluator.evaluate(cell);
             if (value == null || value.getCellType() != CellType.NUMERIC) {
                 return null;
             }
-            return DateUtil.getLocalDateTime(value.getNumberValue()).toLocalDate();
+            return excelSerialDate(value.getNumberValue(), cell);
         }
-        return cell.getLocalDateTimeCellValue().toLocalDate();
+        if (type == CellType.NUMERIC) {
+            return excelSerialDate(cell.getNumericCellValue(), cell);
+        }
+        return null;
+    }
+
+    /**
+     * Accepts normal date-formatted cells, and also numeric/formula serials that Excel shows as
+     * dates via locale formats POI does not mark as date-formatted (for example format index 56).
+     */
+    private static LocalDate excelSerialDate(double serial, Cell cell) {
+        if (!DateUtil.isValidExcelDate(serial) || serial < 32874) {
+            // 32874 ≈ 1990-01-01. Smaller values are usually hours or plain numbers.
+            return null;
+        }
+        boolean formatted;
+        try {
+            formatted = DateUtil.isCellDateFormatted(cell);
+        } catch (RuntimeException ex) {
+            formatted = false;
+        }
+        LocalDate date = DateUtil.getLocalDateTime(serial).toLocalDate();
+        if (formatted) {
+            return date;
+        }
+        int year = date.getYear();
+        if (year < 1990 || year > 2100) {
+            return null;
+        }
+        return date;
     }
 
     private void writeNumber(int rowIndex, int column, Double value) {

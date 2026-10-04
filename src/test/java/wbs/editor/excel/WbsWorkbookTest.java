@@ -198,6 +198,54 @@ class WbsWorkbookTest {
     }
 
     @Test
+    void readsNumericAndFormulaDateHeadersWithoutDateFormat() throws Exception {
+        Path file = temp.resolve("serial-dates.xlsx");
+        LocalDate start = LocalDate.of(2026, 10, 1);
+        try (XSSFWorkbook workbook = new XSSFWorkbook()) {
+            Sheet sheet = workbook.createSheet("WBS");
+            Row dates = sheet.createRow(1);
+            Row weeks = sheet.createRow(2);
+            dates.createCell(5).setCellValue("10月1日");
+            weeks.createCell(5).setCellValue("木");
+            // Plain serial without date format — POI does not treat this as isCellDateFormatted.
+            dates.createCell(6).setCellValue(DateUtil.getExcelDate(java.sql.Date.valueOf(start)));
+            weeks.createCell(6).setCellFormula("TEXT(G2,\"aaa\")");
+            for (int i = 1; i < 7; i++) {
+                char prev = (char) ('G' + i - 1);
+                char col = (char) ('G' + i);
+                dates.createCell(6 + i).setCellFormula(prev + "2+1");
+                weeks.createCell(6 + i).setCellFormula("TEXT(" + col + "2,\"aaa\")");
+            }
+            int row = pair(sheet, 3, 1, "1", "大項目", "", null);
+            row = pair(sheet, row, 2, "1.1", "中項目", "田中", null);
+            pair(sheet, row, 3, "1.1.1", "小項目1", "菅原", null);
+            sheet.getRow(8).createCell(9).setCellValue(2.5);
+            try (OutputStream out = Files.newOutputStream(file)) {
+                workbook.write(out);
+            }
+        }
+
+        try (WbsWorkbook book = WbsWorkbook.open(file, new LayoutConfig())) {
+            LocalDate october4 = LocalDate.of(2026, 10, 4);
+            assertTrue(book.hasDate(october4));
+            book.loadDay(october4);
+            assertEquals(2.5, find(book, "1.1.1").actual(), 0.001);
+
+            find(book, "1.1.1").setActual(3.0);
+            book.writeDay(october4);
+            book.save(file);
+        }
+
+        try (XSSFWorkbook workbook = new XSSFWorkbook(Files.newInputStream(file))) {
+            Sheet sheet = workbook.getSheetAt(0);
+            assertEquals("10月1日", sheet.getRow(1).getCell(5).getStringCellValue());
+            assertEquals(CellType.NUMERIC, sheet.getRow(1).getCell(6).getCellType());
+            assertEquals(3.0, sheet.getRow(8).getCell(9).getNumericCellValue(), 0.001);
+            assertEquals(CellType.FORMULA, sheet.getRow(1).getCell(9).getCellType());
+        }
+    }
+
+    @Test
     void appendsExcelDateColumnUsingExistingFormat() throws Exception {
         Path file = temp.resolve("dates.xlsx");
         try (XSSFWorkbook workbook = new XSSFWorkbook()) {

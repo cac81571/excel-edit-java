@@ -21,17 +21,19 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.text.ParseException;
 import java.time.LocalDate;
-import java.util.Calendar;
-import java.util.Date;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.OptionalInt;
 import javax.swing.AbstractAction;
+import javax.swing.AbstractSpinnerModel;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultCellEditor;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JFileChooser;
+import javax.swing.JFormattedTextField;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JMenu;
@@ -44,9 +46,9 @@ import javax.swing.JSpinner;
 import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.KeyStroke;
-import javax.swing.SpinnerDateModel;
 import javax.swing.TransferHandler;
 import javax.swing.UIManager;
+import javax.swing.text.DefaultFormatterFactory;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableCellRenderer;
@@ -639,7 +641,7 @@ public final class MainFrame extends JFrame {
     private void setDate(LocalDate date) {
         adjusting = true;
         try {
-            dateSpinner.setValue(toDate(date));
+            dateSpinner.setValue(date);
             currentDate = date;
             weekdayLabel.setText("（" + JapaneseDates.weekday(date) + "）");
         } finally {
@@ -662,12 +664,7 @@ public final class MainFrame extends JFrame {
     }
 
     private LocalDate readDateRaw() {
-        Calendar calendar = Calendar.getInstance();
-        calendar.setTime((Date) dateSpinner.getValue());
-        return LocalDate.of(
-                calendar.get(Calendar.YEAR),
-                calendar.get(Calendar.MONTH) + 1,
-                calendar.get(Calendar.DAY_OF_MONTH));
+        return (LocalDate) dateSpinner.getValue();
     }
 
     private String assigneeText() {
@@ -688,19 +685,74 @@ public final class MainFrame extends JFrame {
     }
 
     private static JSpinner createDateSpinner(LocalDate date) {
-        SpinnerDateModel model = new SpinnerDateModel(toDate(date), null, null, Calendar.DAY_OF_MONTH);
-        JSpinner spinner = new JSpinner(model);
-        spinner.setEditor(new JSpinner.DateEditor(spinner, "yyyy/MM/dd"));
+        JSpinner spinner = new JSpinner(new DaySpinnerModel(date));
+        spinner.setEditor(new DaySpinnerEditor(spinner));
         Dimension size = spinner.getPreferredSize();
-        spinner.setPreferredSize(new Dimension(130, size.height));
+        spinner.setPreferredSize(new Dimension(120, size.height));
         return spinner;
     }
 
-    private static Date toDate(LocalDate date) {
-        Calendar calendar = Calendar.getInstance();
-        calendar.set(date.getYear(), date.getMonthValue() - 1, date.getDayOfMonth(), 0, 0, 0);
-        calendar.set(Calendar.MILLISECOND, 0);
-        return calendar.getTime();
+    private static final class DaySpinnerModel extends AbstractSpinnerModel {
+        private LocalDate date;
+
+        DaySpinnerModel(LocalDate date) {
+            this.date = date;
+        }
+
+        @Override
+        public Object getValue() {
+            return date;
+        }
+
+        @Override
+        public void setValue(Object value) {
+            if (!(value instanceof LocalDate next)) {
+                throw new IllegalArgumentException("LocalDate required");
+            }
+            if (!next.equals(date)) {
+                date = next;
+                fireStateChanged();
+            }
+        }
+
+        @Override
+        public Object getNextValue() {
+            return date.plusDays(1);
+        }
+
+        @Override
+        public Object getPreviousValue() {
+            return date.minusDays(1);
+        }
+    }
+
+    private static final class DaySpinnerEditor extends JSpinner.DefaultEditor {
+        DaySpinnerEditor(JSpinner spinner) {
+            super(spinner);
+            JFormattedTextField field = getTextField();
+            field.setFormatterFactory(new DefaultFormatterFactory(new YyyymmddFormatter()));
+            field.setHorizontalAlignment(JTextField.LEFT);
+            field.setColumns(8);
+            field.setValue(spinner.getValue());
+        }
+    }
+
+    private static final class YyyymmddFormatter extends JFormattedTextField.AbstractFormatter {
+        private static final DateTimeFormatter FORMAT = DateTimeFormatter.BASIC_ISO_DATE;
+
+        @Override
+        public Object stringToValue(String text) throws ParseException {
+            try {
+                return LocalDate.parse(text.trim(), FORMAT);
+            } catch (DateTimeParseException ex) {
+                throw new ParseException(ex.getMessage(), 0);
+            }
+        }
+
+        @Override
+        public String valueToString(Object value) {
+            return value == null ? "" : FORMAT.format((LocalDate) value);
+        }
     }
 
     private static GridBagConstraints constraints(int x, int y, double weight) {
