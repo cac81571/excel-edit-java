@@ -734,6 +734,36 @@ public final class MainFrame extends JFrame {
             field.setHorizontalAlignment(JTextField.LEFT);
             field.setColumns(8);
             field.setValue(spinner.getValue());
+            OverwriteOnType.install(field);
+        }
+    }
+
+    /** First printable key after focus replaces the whole value instead of appending. */
+    private static final class OverwriteOnType {
+        private OverwriteOnType() {
+        }
+
+        static void install(JTextField field) {
+            final boolean[] replace = {true};
+            field.addFocusListener(new java.awt.event.FocusAdapter() {
+                @Override
+                public void focusGained(java.awt.event.FocusEvent event) {
+                    replace[0] = true;
+                    javax.swing.SwingUtilities.invokeLater(field::selectAll);
+                }
+            });
+            field.addKeyListener(new java.awt.event.KeyAdapter() {
+                @Override
+                public void keyTyped(java.awt.event.KeyEvent event) {
+                    char ch = event.getKeyChar();
+                    if (!replace[0] || Character.isISOControl(ch) || ch == KeyEvent.CHAR_UNDEFINED) {
+                        return;
+                    }
+                    replace[0] = false;
+                    field.setText(String.valueOf(ch));
+                    event.consume();
+                }
+            });
         }
     }
 
@@ -803,6 +833,8 @@ public final class MainFrame extends JFrame {
 
     private static final class HoursEditor extends DefaultCellEditor {
         private final JTextField field;
+        private boolean replaceOnType = true;
+        private boolean startedByKey;
 
         HoursEditor() {
             super(new JTextField());
@@ -810,6 +842,39 @@ public final class MainFrame extends JFrame {
             field.setHorizontalAlignment(JTextField.RIGHT);
             field.setBorder(BorderFactory.createEmptyBorder(0, 4, 0, 4));
             setClickCountToStart(1);
+            field.addKeyListener(new java.awt.event.KeyAdapter() {
+                @Override
+                public void keyTyped(java.awt.event.KeyEvent event) {
+                    char ch = event.getKeyChar();
+                    if (!replaceOnType || Character.isISOControl(ch) || ch == KeyEvent.CHAR_UNDEFINED) {
+                        return;
+                    }
+                    replaceOnType = false;
+                    field.setText(String.valueOf(ch));
+                    event.consume();
+                }
+            });
+        }
+
+        @Override
+        public boolean isCellEditable(java.util.EventObject event) {
+            startedByKey = event instanceof KeyEvent;
+            return super.isCellEditable(event);
+        }
+
+        @Override
+        public Component getTableCellEditorComponent(
+                JTable table, Object value, boolean isSelected, int row, int column) {
+            replaceOnType = true;
+            Component component = super.getTableCellEditorComponent(table, value, isSelected, row, column);
+            if (startedByKey) {
+                // Let the key that started editing become the whole new value.
+                field.setText("");
+            } else {
+                javax.swing.SwingUtilities.invokeLater(field::selectAll);
+            }
+            startedByKey = false;
+            return component;
         }
 
         @Override
@@ -817,6 +882,7 @@ public final class MainFrame extends JFrame {
             if (!Hours.parsable(field.getText())) {
                 field.setBackground(new Color(0xFDECEC));
                 field.selectAll();
+                replaceOnType = true;
                 return false;
             }
             field.setBackground(UIManager.getColor("TextField.background"));

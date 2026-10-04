@@ -25,8 +25,9 @@ class HoursTest {
 
     @Test
     void formatsTrailingZeros() {
-        assertEquals("2", Hours.format(2.0));
+        assertEquals("2.00", Hours.format(2.0));
         assertEquals("1.25", Hours.format(1.25));
+        assertEquals("0.00", Hours.format(0.0));
         assertEquals("", Hours.format(null));
     }
 }

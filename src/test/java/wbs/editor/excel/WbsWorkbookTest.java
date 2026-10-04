@@ -119,6 +119,11 @@ class WbsWorkbookTest {
             assertNull(find(book, "1.1.1").actual());
             assertEquals(0.0, find(book, "1.1.2").actual(), 0.001);
         }
+        try (XSSFWorkbook workbook = new XSSFWorkbook(Files.newInputStream(file))) {
+            Sheet sheet = workbook.getSheetAt(0);
+            Cell zero = sheet.getRow(10).getCell(8);
+            assertEquals("0.00", zero.getCellStyle().getDataFormatString());
+        }
     }
 
     @Test

@@ -41,10 +41,7 @@ public final class Hours {
         if (value == null) {
             return "";
         }
-        if (Math.abs(value - Math.rint(value)) < 1e-9) {
-            return Long.toString(Math.round(value));
-        }
-        DecimalFormat format = new DecimalFormat("0.##", DecimalFormatSymbols.getInstance(Locale.US));
+        DecimalFormat format = new DecimalFormat("0.00", DecimalFormatSymbols.getInstance(Locale.US));
         return format.format(value);
     }
 

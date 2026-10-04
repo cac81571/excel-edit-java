@@ -45,6 +45,7 @@ public final class WbsWorkbook implements AutoCloseable {
     private final FormulaEvaluator evaluator;
     private final List<WbsItem> items;
     private final List<DateColumn> dateColumns = new ArrayList<>();
+    private CellStyle hoursStyle;
 
     private WbsWorkbook(Workbook workbook, LayoutConfig layout) {
         this.workbook = workbook;
@@ -530,12 +531,24 @@ public final class WbsWorkbook implements AutoCloseable {
         }
         if (cell == null) {
             cell = row.createCell(column);
-            CellStyle style = sampleNumberStyle(rowIndex, column);
-            if (style != null) {
-                cell.setCellStyle(style);
-            }
         }
+        cell.setCellStyle(hoursStyle(rowIndex, column, cell));
         cell.setCellValue(value);
+    }
+
+    private CellStyle hoursStyle(int rowIndex, int column, Cell cell) {
+        if (hoursStyle == null) {
+            hoursStyle = workbook.createCellStyle();
+            CellStyle sample = cell.getCellStyle();
+            if (sample == null || sample.getIndex() == 0) {
+                sample = sampleNumberStyle(rowIndex, column);
+            }
+            if (sample != null && sample.getIndex() != 0) {
+                hoursStyle.cloneStyleFrom(sample);
+            }
+            hoursStyle.setDataFormat(workbook.createDataFormat().getFormat("0.00"));
+        }
+        return hoursStyle;
     }
 
     private CellStyle sampleNumberStyle(int rowIndex, int column) {
