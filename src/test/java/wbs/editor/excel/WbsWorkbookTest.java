@@ -123,6 +123,7 @@ class WbsWorkbookTest {
             Sheet sheet = workbook.getSheetAt(0);
             Cell zero = sheet.getRow(10).getCell(8);
             assertEquals("0.00", zero.getCellStyle().getDataFormatString());
+            assertNull(workbook.getCalculationChain());
         }
     }
 

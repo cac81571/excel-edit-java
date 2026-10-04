@@ -25,6 +25,8 @@ import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
+import org.apache.poi.ooxml.POIXMLDocumentPart;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import wbs.editor.model.Hours;
 import wbs.editor.model.JapaneseDates;
 import wbs.editor.model.LayoutConfig;
@@ -163,6 +165,7 @@ public final class WbsWorkbook implements AutoCloseable {
         Path tmp = path.resolveSibling(path.getFileName().toString() + ".tmp");
         try {
             try (OutputStream out = Files.newOutputStream(tmp)) {
+                removeCalculationChain();
                 workbook.setForceFormulaRecalculation(true);
                 workbook.write(out);
             }
@@ -174,6 +177,28 @@ public final class WbsWorkbook implements AutoCloseable {
         } catch (IOException ex) {
             Files.deleteIfExists(tmp);
             throw ex;
+        }
+    }
+
+    /**
+     * Stale calcChain entries (common with shared formulas / column shifts) make Excel show
+     * "found a problem with some content". Excel rebuilds the chain when it is absent.
+     */
+    private void removeCalculationChain() {
+        if (!(workbook instanceof XSSFWorkbook xssf)) {
+            return;
+        }
+        var chain = xssf.getCalculationChain();
+        if (chain == null) {
+            return;
+        }
+        try {
+            var method = POIXMLDocumentPart.class.getDeclaredMethod(
+                    "removeRelation", POIXMLDocumentPart.class, boolean.class);
+            method.setAccessible(true);
+            method.invoke(xssf, chain, true);
+        } catch (ReflectiveOperationException ex) {
+            throw new IllegalStateException("calcChain を削除できませんでした。", ex);
         }
     }
 
@@ -344,6 +369,8 @@ public final class WbsWorkbook implements AutoCloseable {
         if (existing.isPresent()) {
             return existing.getAsInt();
         }
+        // Shared formulas break under shiftColumns; freeze header formulas to cached values first.
+        materializeHeaderFormulas();
         HeaderSample dateSample = capture(layout.dateRow - 1);
         HeaderSample weekdaySample = layout.weekdayRow > 0 ? capture(layout.weekdayRow - 1) : null;
         int sampleWidth = dateColumns.isEmpty() ? 12 * 256 : sheet.getColumnWidth(dateColumns.get(0).column);
@@ -374,6 +401,42 @@ public final class WbsWorkbook implements AutoCloseable {
         dateColumns.add(created == null ? DateColumn.exact(insertAt, date) : created);
         dateColumns.sort(Comparator.comparingInt(column -> column.column));
         return insertAt;
+    }
+
+    private void materializeHeaderFormulas() {
+        materializeRowFormulas(layout.dateRow - 1);
+        if (layout.weekdayRow > 0 && layout.weekdayRow != layout.dateRow) {
+            materializeRowFormulas(layout.weekdayRow - 1);
+        }
+        evaluator.clearAllCachedResultValues();
+    }
+
+    private void materializeRowFormulas(int rowIndex) {
+        if (rowIndex < 0) {
+            return;
+        }
+        for (DateColumn dateColumn : List.copyOf(dateColumns)) {
+            Cell cell = cell(rowIndex, dateColumn.column);
+            if (cell == null || cell.getCellType() != CellType.FORMULA) {
+                continue;
+            }
+            CellValue value = evaluator.evaluate(cell);
+            if (value == null) {
+                continue;
+            }
+            CellStyle style = cell.getCellStyle();
+            switch (value.getCellType()) {
+                case NUMERIC -> {
+                    cell.setCellValue(value.getNumberValue());
+                    if (style != null) {
+                        cell.setCellStyle(style);
+                    }
+                }
+                case STRING -> cell.setCellValue(value.getStringValue());
+                case BOOLEAN -> cell.setCellValue(value.getBooleanValue());
+                default -> cell.setBlank();
+            }
+        }
     }
 
     private int insertIndex(LocalDate date) {
@@ -532,8 +595,19 @@ public final class WbsWorkbook implements AutoCloseable {
         if (cell == null) {
             cell = row.createCell(column);
         }
-        cell.setCellStyle(hoursStyle(rowIndex, column, cell));
+        applyHoursFormat(cell, rowIndex, column);
         cell.setCellValue(value);
+    }
+
+    private void applyHoursFormat(Cell cell, int rowIndex, int column) {
+        CellStyle current = cell.getCellStyle();
+        if (current != null) {
+            String format = current.getDataFormatString();
+            if (format != null && format.startsWith("0.00")) {
+                return;
+            }
+        }
+        cell.setCellStyle(hoursStyle(rowIndex, column, cell));
     }
 
     private CellStyle hoursStyle(int rowIndex, int column, Cell cell) {
@@ -546,7 +620,8 @@ public final class WbsWorkbook implements AutoCloseable {
             if (sample != null && sample.getIndex() != 0) {
                 hoursStyle.cloneStyleFrom(sample);
             }
-            hoursStyle.setDataFormat(workbook.createDataFormat().getFormat("0.00"));
+            short format = workbook.createDataFormat().getFormat("0.00");
+            hoursStyle.setDataFormat(format);
         }
         return hoursStyle;
     }
