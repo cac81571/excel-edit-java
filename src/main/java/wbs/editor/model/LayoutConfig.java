@@ -1,7 +1,5 @@
 package wbs.editor.model;
 
-import java.util.prefs.Preferences;
-
 /**
  * Positions are 1-based for rows, matching Excel. Columns are stored 0-based.
  * Defaults follow a sheet whose dates are on row 2, weekdays on row 3, and WBS rows start at row 4.
@@ -20,25 +18,21 @@ public final class LayoutConfig {
     public String planLabel = "予定";
     public String actualLabel = "実績";
 
-    public static Preferences preferences() {
-        return Preferences.userNodeForPackage(LayoutConfig.class);
-    }
-
-    public static LayoutConfig load(Preferences prefs) {
+    public static LayoutConfig load(AppSettings settings) {
         LayoutConfig defaults = new LayoutConfig();
         LayoutConfig config = new LayoutConfig();
-        config.sheetName = prefs.get("sheetName", "");
-        config.dateRow = prefs.getInt("dateRow", defaults.dateRow);
-        config.weekdayRow = prefs.getInt("weekdayRow", defaults.weekdayRow);
-        config.dataStartRow = prefs.getInt("dataStartRow", defaults.dataStartRow);
-        config.levelColumn = Columns.parseOrDefault(prefs.get("levelColumn", "A"), defaults.levelColumn);
-        config.wbsColumn = Columns.parseOrDefault(prefs.get("wbsColumn", "B"), defaults.wbsColumn);
-        config.nameColumn = Columns.parseOrDefault(prefs.get("nameColumn", "C"), defaults.nameColumn);
-        config.assigneeColumn = Columns.parseOrDefault(prefs.get("assigneeColumn", "D"), defaults.assigneeColumn);
-        config.kindColumn = Columns.parseOrDefault(prefs.get("kindColumn", "E"), defaults.kindColumn);
-        config.firstDateColumn = Columns.parseOrDefault(prefs.get("firstDateColumn", "F"), defaults.firstDateColumn);
-        config.planLabel = prefs.get("planLabel", defaults.planLabel);
-        config.actualLabel = prefs.get("actualLabel", defaults.actualLabel);
+        config.sheetName = settings.get("sheetName", "");
+        config.dateRow = settings.getInt("dateRow", defaults.dateRow);
+        config.weekdayRow = settings.getInt("weekdayRow", defaults.weekdayRow);
+        config.dataStartRow = settings.getInt("dataStartRow", defaults.dataStartRow);
+        config.levelColumn = Columns.parseOrDefault(settings.get("levelColumn", "A"), defaults.levelColumn);
+        config.wbsColumn = Columns.parseOrDefault(settings.get("wbsColumn", "B"), defaults.wbsColumn);
+        config.nameColumn = Columns.parseOrDefault(settings.get("nameColumn", "C"), defaults.nameColumn);
+        config.assigneeColumn = Columns.parseOrDefault(settings.get("assigneeColumn", "D"), defaults.assigneeColumn);
+        config.kindColumn = Columns.parseOrDefault(settings.get("kindColumn", "E"), defaults.kindColumn);
+        config.firstDateColumn = Columns.parseOrDefault(settings.get("firstDateColumn", "F"), defaults.firstDateColumn);
+        config.planLabel = settings.get("planLabel", defaults.planLabel);
+        config.actualLabel = settings.get("actualLabel", defaults.actualLabel);
         if (config.planLabel.isBlank()) {
             config.planLabel = defaults.planLabel;
         }
@@ -48,19 +42,19 @@ public final class LayoutConfig {
         return config;
     }
 
-    public void save(Preferences prefs) {
-        prefs.put("sheetName", sheetName == null ? "" : sheetName);
-        prefs.putInt("dateRow", dateRow);
-        prefs.putInt("weekdayRow", weekdayRow);
-        prefs.putInt("dataStartRow", dataStartRow);
-        prefs.put("levelColumn", Columns.name(levelColumn));
-        prefs.put("wbsColumn", Columns.name(wbsColumn));
-        prefs.put("nameColumn", Columns.name(nameColumn));
-        prefs.put("assigneeColumn", Columns.name(assigneeColumn));
-        prefs.put("kindColumn", Columns.name(kindColumn));
-        prefs.put("firstDateColumn", Columns.name(firstDateColumn));
-        prefs.put("planLabel", planLabel);
-        prefs.put("actualLabel", actualLabel);
+    public void save(AppSettings settings) {
+        settings.put("sheetName", sheetName == null ? "" : sheetName);
+        settings.putInt("dateRow", dateRow);
+        settings.putInt("weekdayRow", weekdayRow);
+        settings.putInt("dataStartRow", dataStartRow);
+        settings.put("levelColumn", Columns.name(levelColumn));
+        settings.put("wbsColumn", Columns.name(wbsColumn));
+        settings.put("nameColumn", Columns.name(nameColumn));
+        settings.put("assigneeColumn", Columns.name(assigneeColumn));
+        settings.put("kindColumn", Columns.name(kindColumn));
+        settings.put("firstDateColumn", Columns.name(firstDateColumn));
+        settings.put("planLabel", planLabel);
+        settings.put("actualLabel", actualLabel);
     }
 
     public LayoutConfig copy() {

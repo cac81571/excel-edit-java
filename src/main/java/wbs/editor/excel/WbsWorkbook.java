@@ -27,6 +27,7 @@ import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.apache.poi.ooxml.POIXMLDocumentPart;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import wbs.editor.model.AppSettings;
 import wbs.editor.model.Hours;
 import wbs.editor.model.LayoutConfig;
 import wbs.editor.model.Text;
@@ -200,7 +201,7 @@ public final class WbsWorkbook implements AutoCloseable {
     }
 
     static Path backupDirectory() {
-        return Path.of(System.getProperty("user.home"), "WBS実績入力", "backup");
+        return AppSettings.backupDirectory();
     }
 
     static Path backupPath(Path path) {

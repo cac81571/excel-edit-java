@@ -29,6 +29,7 @@ import javax.swing.AbstractAction;
 import javax.swing.AbstractSpinnerModel;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultCellEditor;
+import javax.swing.DefaultListCellRenderer;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
@@ -36,6 +37,7 @@ import javax.swing.JFileChooser;
 import javax.swing.JFormattedTextField;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import javax.swing.JList;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
@@ -46,6 +48,7 @@ import javax.swing.JSpinner;
 import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.KeyStroke;
+import javax.swing.SwingConstants;
 import javax.swing.TransferHandler;
 import javax.swing.UIManager;
 import javax.swing.text.DefaultFormatterFactory;
@@ -57,6 +60,7 @@ import javax.swing.event.DocumentListener;
 import javax.swing.event.TableModelEvent;
 import com.formdev.flatlaf.FlatClientProperties;
 import wbs.editor.excel.WbsWorkbook;
+import wbs.editor.model.AppSettings;
 import wbs.editor.model.Columns;
 import wbs.editor.model.Hours;
 import wbs.editor.model.JapaneseDates;
@@ -71,8 +75,8 @@ public final class MainFrame extends JFrame {
     private static final Color INPUT_BACKGROUND = new Color(0xFFF6D8);
     private static final Color HINT_FOREGROUND = new Color(0x667085);
 
-    private final java.util.prefs.Preferences prefs = LayoutConfig.preferences();
-    private LayoutConfig layout = LayoutConfig.load(prefs);
+    private final AppSettings settings = AppSettings.load();
+    private LayoutConfig layout = LayoutConfig.load(settings);
     private final WbsTableModel model = new WbsTableModel();
     private final JTable table = createTable();
     private final JTextField fileField = new JTextField();
@@ -80,8 +84,11 @@ public final class MainFrame extends JFrame {
     private final JTextField nameFilterField = new JTextField();
     private final JSpinner dateSpinner;
     private final JLabel weekdayLabel = new JLabel();
+    private final JLabel totalsLabel = new JLabel(" ");
     private final JLabel summaryLabel = new JLabel(" ");
+    private final JLabel selectionLabel = new JLabel(" ");
     private final JLabel layoutLabel = new JLabel(" ");
+    private final JList<String> rowHeader = new JList<>();
     private final JButton saveButton = new JButton("保存");
     private final JButton reloadButton = new JButton("再読込");
 
@@ -175,22 +182,33 @@ public final class MainFrame extends JFrame {
         form.add(assigneeBox, constraints(1, 1, 0));
         form.add(new JLabel("日付"), constraints(2, 1, 0));
         form.add(dateSpinner, constraints(3, 1, 0));
-        form.add(weekdayLabel, constraints(4, 1, 0));
+        JPanel dateExtras = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        dateExtras.setOpaque(false);
+        dateExtras.add(weekdayLabel);
+        dateExtras.add(totalsLabel);
+        form.add(dateExtras, constraints(4, 1, 1));
         form.add(buttons, constraints(5, 1, 0));
         form.add(new JLabel("項目名"), constraints(0, 2, 0));
         GridBagConstraints nameConstraints = constraints(1, 2, 1);
         nameConstraints.gridwidth = 5;
         nameConstraints.fill = GridBagConstraints.HORIZONTAL;
         form.add(nameFilterField, nameConstraints);
+        JPanel summaryRow = new JPanel(new BorderLayout(12, 0));
+        summaryRow.setOpaque(false);
+        summaryRow.add(summaryLabel, BorderLayout.WEST);
+        selectionLabel.setHorizontalAlignment(SwingConstants.RIGHT);
+        summaryRow.add(selectionLabel, BorderLayout.EAST);
         GridBagConstraints summaryConstraints = constraints(0, 3, 1);
         summaryConstraints.gridwidth = 6;
         summaryConstraints.fill = GridBagConstraints.HORIZONTAL;
-        form.add(summaryLabel, summaryConstraints);
+        form.add(summaryRow, summaryConstraints);
 
         layoutLabel.setForeground(HINT_FOREGROUND);
         layoutLabel.setFont(layoutLabel.getFont().deriveFont(12f));
+        configureRowHeader();
 
         JScrollPane scroll = new JScrollPane(table);
+        scroll.setRowHeaderView(rowHeader);
         JPanel root = new JPanel(new BorderLayout(0, 8));
         root.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
         root.add(form, BorderLayout.NORTH);
@@ -339,7 +357,7 @@ public final class MainFrame extends JFrame {
         JFileChooser chooser = new JFileChooser();
         chooser.setDialogTitle("WBSのExcelを開く");
         chooser.setFileFilter(new FileNameExtensionFilter("Excel ファイル (*.xlsx, *.xls)", "xlsx", "xls"));
-        String directory = prefs.get("lastDir", "");
+        String directory = settings.get("lastDir", "");
         if (!directory.isBlank()) {
             chooser.setCurrentDirectory(new File(directory));
         }
@@ -358,7 +376,7 @@ public final class MainFrame extends JFrame {
     }
 
     private void openLastFile() {
-        String last = prefs.get("lastFile", "");
+        String last = settings.get("lastFile", "");
         if (last.isBlank()) {
             return;
         }
@@ -379,13 +397,14 @@ public final class MainFrame extends JFrame {
             currentFile = path.toAbsolutePath();
             fileField.setText(currentFile.toString());
             setTitle("WBS実績入力 - " + currentFile.getFileName());
-            prefs.put("lastFile", currentFile.toString());
+            settings.put("lastFile", currentFile.toString());
             if (currentFile.getParent() != null) {
-                prefs.put("lastDir", currentFile.getParent().toString());
+                settings.put("lastDir", currentFile.getParent().toString());
             }
+            persistSettings();
             String selected = assigneeText();
             if (selected.isBlank()) {
-                selected = prefs.get("lastAssignee", "");
+                selected = settings.get("lastAssignee", "");
             }
             adjusting = true;
             try {
@@ -461,7 +480,8 @@ public final class MainFrame extends JFrame {
             }
             workbook.writeDay(currentDate);
             var backup = workbook.save(currentFile);
-            prefs.put("lastAssignee", assigneeText());
+            settings.put("lastAssignee", assigneeText());
+            persistSettings();
             notice = "保存しました。";
             updateStatus();
             String message = "保存しました。\n" + currentFile.getFileName();
@@ -493,7 +513,8 @@ public final class MainFrame extends JFrame {
             return;
         }
         layout = updated;
-        layout.save(prefs);
+        layout.save(settings);
+        persistSettings();
         if (currentFile != null) {
             loadFile(currentFile);
         } else {
@@ -559,12 +580,42 @@ public final class MainFrame extends JFrame {
         } else {
             model.refreshValues();
         }
+        refreshRowHeader();
         updateStatus();
+    }
+
+    private void configureRowHeader() {
+        rowHeader.setFixedCellWidth(44);
+        rowHeader.setFixedCellHeight(table.getRowHeight());
+        rowHeader.setBackground(new Color(0xF3F4F6));
+        rowHeader.setForeground(HINT_FOREGROUND);
+        rowHeader.setFont(table.getFont());
+        rowHeader.setSelectionModel(table.getSelectionModel());
+        rowHeader.setFocusable(false);
+        DefaultListCellRenderer renderer = new DefaultListCellRenderer();
+        renderer.setHorizontalAlignment(SwingConstants.RIGHT);
+        renderer.setBorder(BorderFactory.createEmptyBorder(0, 4, 0, 8));
+        rowHeader.setCellRenderer(renderer);
+    }
+
+    private void refreshRowHeader() {
+        int count = table.getRowCount();
+        String[] labels = new String[count];
+        for (int viewRow = 0; viewRow < count; viewRow++) {
+            WbsItem item = model.row(table.convertRowIndexToModel(viewRow)).item();
+            int excelRow = item.planRow() >= 0 ? item.planRow() + 1
+                    : item.actualRow() >= 0 ? item.actualRow() + 1 : -1;
+            labels[viewRow] = excelRow > 0 ? Integer.toString(excelRow) : "";
+        }
+        rowHeader.setListData(labels);
+        rowHeader.setFixedCellHeight(table.getRowHeight());
     }
 
     private void updateStatus() {
         List<WbsRow> rows = model.rows();
         String message;
+        String totals = " ";
+        String selection = " ";
         if (workbook == null) {
             message = "Excelファイルを開いてください。";
         } else if (workbook.items().isEmpty()) {
@@ -581,13 +632,20 @@ public final class MainFrame extends JFrame {
                         + workbook.items().size() + " 件あります。";
             }
         } else {
-            message = summary(rows);
+            SummaryParts parts = summary(rows);
+            message = parts.message();
+            totals = parts.totals();
+            selection = parts.selection();
         }
         if (!notice.isEmpty()) {
             message = notice + "  " + message;
         }
         summaryLabel.setText(message);
         summaryLabel.setToolTipText(message);
+        totalsLabel.setText(totals);
+        totalsLabel.setToolTipText(totals.trim().isEmpty() ? null : totals);
+        selectionLabel.setText(selection);
+        selectionLabel.setToolTipText(selection.trim().isEmpty() ? null : selection);
         String resolved = workbook == null
                 ? (layout.sheetName == null || layout.sheetName.isBlank() ? "先頭のシート" : layout.sheetName)
                 : workbook.sheetName();
@@ -599,7 +657,7 @@ public final class MainFrame extends JFrame {
         reloadButton.setEnabled(opened);
     }
 
-    private String summary(List<WbsRow> rows) {
+    private SummaryParts summary(List<WbsRow> rows) {
         int owned = 0;
         int missingActual = 0;
         double plan = 0;
@@ -619,36 +677,36 @@ public final class MainFrame extends JFrame {
                 actual += row.item().actual();
             }
         }
-        StringBuilder builder = new StringBuilder();
-        builder.append(rows.size()).append("件（入力 ").append(owned)
+        StringBuilder message = new StringBuilder();
+        message.append(rows.size()).append("件（入力 ").append(owned)
                 .append(" / 親 ").append(rows.size() - owned).append("）");
-        builder.append("   予定合計 ").append(Hours.format(plan));
-        builder.append("   実績合計 ").append(Hours.format(actual));
-        appendSelection(builder, rows);
         if (!workbook.hasDate(currentDate)) {
-            builder.append("    この日付の列はありません。保存できません。");
+            message.append("    この日付の列はありません。保存できません。");
         }
         if (missingActual > 0) {
-            builder.append("    実績行がない項目が ").append(missingActual).append(" 件あります。");
+            message.append("    実績行がない項目が ").append(missingActual).append(" 件あります。");
         }
-        return builder.toString();
+        String totals = "予定合計 " + Hours.format(plan) + "   実績合計 " + Hours.format(actual);
+        return new SummaryParts(message.toString(), totals, selectionText(rows));
     }
 
-    private void appendSelection(StringBuilder builder, List<WbsRow> rows) {
+    private String selectionText(List<WbsRow> rows) {
         int selected = table.getSelectedRow();
         if (selected < 0) {
-            return;
+            return " ";
         }
         int modelRow = table.convertRowIndexToModel(selected);
         if (modelRow < 0 || modelRow >= rows.size()) {
-            return;
+            return " ";
         }
         WbsItem item = rows.get(modelRow).item();
         OptionalInt column = workbook.columnOf(currentDate);
         String name = item.name().isBlank() ? item.wbsNo() : item.name();
-        builder.append("    ").append(name);
-        builder.append("  予定 ").append(address(item.planRow(), column));
-        builder.append("  実績 ").append(address(item.actualRow(), column));
+        return name + "  予定 " + address(item.planRow(), column)
+                + "  実績 " + address(item.actualRow(), column);
+    }
+
+    private record SummaryParts(String message, String totals, String selection) {
     }
 
     private String address(int row, OptionalInt column) {
@@ -695,11 +753,21 @@ public final class MainFrame extends JFrame {
         if (!confirmSaveIfDirty("終了します。")) {
             return;
         }
-        prefs.put("lastAssignee", assigneeText());
+        settings.put("lastAssignee", assigneeText());
+        persistSettings();
         dispose();
         if (workbook != null) {
             workbook.close();
             workbook = null;
+        }
+    }
+
+    private void persistSettings() {
+        try {
+            settings.save();
+        } catch (IOException ex) {
+            ex.printStackTrace();
+            error("設定を保存できませんでした。\n" + message(ex));
         }
     }
 
