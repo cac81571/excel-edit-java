@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 public final class WbsFilter {
@@ -48,10 +49,19 @@ public final class WbsFilter {
     }
 
     public static List<WbsRow> visible(List<WbsItem> items, String person) {
+        return visible(items, person, "");
+    }
+
+    public static List<WbsRow> visible(List<WbsItem> items, String person, String nameKeyword) {
+        String keyword = Text.normalize(nameKeyword).toLowerCase(Locale.ROOT);
         boolean[] keep = new boolean[items.size()];
         boolean[] owned = new boolean[items.size()];
         for (int i = 0; i < items.size(); i++) {
-            if (!assignedTo(items.get(i).assignee(), person)) {
+            WbsItem item = items.get(i);
+            if (!assignedTo(item.assignee(), person)) {
+                continue;
+            }
+            if (!keyword.isEmpty() && !nameContains(item.name(), keyword)) {
                 continue;
             }
             owned[i] = true;
@@ -81,6 +91,14 @@ public final class WbsFilter {
             rows.add(new WbsRow(items.get(i), depth, owned[i]));
         }
         return rows;
+    }
+
+    public static boolean nameContains(String name, String keyword) {
+        String needle = Text.normalize(keyword).toLowerCase(Locale.ROOT);
+        if (needle.isEmpty()) {
+            return true;
+        }
+        return Text.normalize(name).toLowerCase(Locale.ROOT).contains(needle);
     }
 
     public static boolean assignedTo(String assigneeCell, String person) {

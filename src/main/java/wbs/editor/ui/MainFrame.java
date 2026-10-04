@@ -11,6 +11,7 @@ import java.awt.GridLayout;
 import java.awt.Insets;
 import java.awt.Toolkit;
 import java.awt.datatransfer.DataFlavor;
+import java.awt.datatransfer.StringSelection;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
@@ -77,6 +78,7 @@ public final class MainFrame extends JFrame {
     private final JTable table = createTable();
     private final JTextField fileField = new JTextField();
     private final JComboBox<String> assigneeBox = new JComboBox<>();
+    private final JTextField nameFilterField = new JTextField();
     private final JSpinner dateSpinner;
     private final JLabel weekdayLabel = new JLabel();
     private final JLabel summaryLabel = new JLabel(" ");
@@ -145,23 +147,10 @@ public final class MainFrame extends JFrame {
         assigneeBox.setPreferredSize(new Dimension(180, assigneeBox.getPreferredSize().height));
         if (assigneeBox.getEditor().getEditorComponent() instanceof JTextField editor) {
             editor.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "担当者名");
-            editor.getDocument().addDocumentListener(new DocumentListener() {
-                @Override
-                public void insertUpdate(DocumentEvent event) {
-                    applyAssignee();
-                }
-
-                @Override
-                public void removeUpdate(DocumentEvent event) {
-                    applyAssignee();
-                }
-
-                @Override
-                public void changedUpdate(DocumentEvent event) {
-                    applyAssignee();
-                }
-            });
+            editor.getDocument().addDocumentListener(filterListener());
         }
+        nameFilterField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "項目名の一部");
+        nameFilterField.getDocument().addDocumentListener(filterListener());
 
         JButton openButton = new JButton("開く");
         openButton.addActionListener(event -> chooseFile());
@@ -176,10 +165,6 @@ public final class MainFrame extends JFrame {
         buttons.add(saveButton);
         buttons.add(settingsButton);
 
-        JLabel hint = new JLabel("<html>黄色いセルに、選んだ日の予定と実績を入力します。"
-                + "グレーの行は親WBSです。担当が違っても、自分の作業の上位は表示します。</html>");
-        hint.setForeground(HINT_FOREGROUND);
-
         JPanel form = new JPanel(new GridBagLayout());
         form.add(new JLabel("Excel"), constraints(0, 0, 0));
         GridBagConstraints fileConstraints = constraints(1, 0, 1);
@@ -193,23 +178,25 @@ public final class MainFrame extends JFrame {
         form.add(dateSpinner, constraints(3, 1, 0));
         form.add(weekdayLabel, constraints(4, 1, 0));
         form.add(buttons, constraints(5, 1, 0));
-        GridBagConstraints hintConstraints = constraints(0, 2, 1);
-        hintConstraints.gridwidth = 6;
-        hintConstraints.fill = GridBagConstraints.HORIZONTAL;
-        form.add(hint, hintConstraints);
+        form.add(new JLabel("項目名"), constraints(0, 2, 0));
+        GridBagConstraints nameConstraints = constraints(1, 2, 1);
+        nameConstraints.gridwidth = 5;
+        nameConstraints.fill = GridBagConstraints.HORIZONTAL;
+        form.add(nameFilterField, nameConstraints);
+        GridBagConstraints summaryConstraints = constraints(0, 3, 1);
+        summaryConstraints.gridwidth = 6;
+        summaryConstraints.fill = GridBagConstraints.HORIZONTAL;
+        form.add(summaryLabel, summaryConstraints);
 
         layoutLabel.setForeground(HINT_FOREGROUND);
         layoutLabel.setFont(layoutLabel.getFont().deriveFont(12f));
-        JPanel status = new JPanel(new GridLayout(2, 1, 0, 2));
-        status.add(summaryLabel);
-        status.add(layoutLabel);
 
         JScrollPane scroll = new JScrollPane(table);
         JPanel root = new JPanel(new BorderLayout(0, 8));
         root.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
         root.add(form, BorderLayout.NORTH);
         root.add(scroll, BorderLayout.CENTER);
-        root.add(status, BorderLayout.SOUTH);
+        root.add(layoutLabel, BorderLayout.SOUTH);
         setContentPane(root);
 
         TransferHandler drop = new FileDropHandler();
@@ -243,6 +230,38 @@ public final class MainFrame extends JFrame {
             }
         });
         table.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0), "clearHours");
+        AbstractAction copyCells = new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent event) {
+                copySelectedCells();
+            }
+        };
+        table.getActionMap().put("copy", copyCells);
+        table.getInputMap(JComponent.WHEN_FOCUSED).put(
+                KeyStroke.getKeyStroke(KeyEvent.VK_C, Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()),
+                "copy");
+    }
+
+    private void copySelectedCells() {
+        int[] rows = table.getSelectedRows();
+        int[] columns = table.getSelectedColumns();
+        if (rows.length == 0 || columns.length == 0) {
+            return;
+        }
+        StringBuilder text = new StringBuilder();
+        for (int r = 0; r < rows.length; r++) {
+            if (r > 0) {
+                text.append('\n');
+            }
+            for (int c = 0; c < columns.length; c++) {
+                if (c > 0) {
+                    text.append('\t');
+                }
+                Object value = table.getValueAt(rows[r], columns[c]);
+                text.append(value == null ? "" : value.toString());
+            }
+        }
+        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text.toString()), null);
     }
 
     private JTable createTable() {
@@ -483,12 +502,31 @@ public final class MainFrame extends JFrame {
         }
     }
 
-    private void applyAssignee() {
+    private void applyFilters() {
         if (adjusting) {
             return;
         }
         notice = "";
         refreshTable(true);
+    }
+
+    private DocumentListener filterListener() {
+        return new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent event) {
+                applyFilters();
+            }
+
+            @Override
+            public void removeUpdate(DocumentEvent event) {
+                applyFilters();
+            }
+
+            @Override
+            public void changedUpdate(DocumentEvent event) {
+                applyFilters();
+            }
+        };
     }
 
     private void onDateChanged() {
@@ -517,7 +555,8 @@ public final class MainFrame extends JFrame {
     private void refreshTable(boolean structureChanged) {
         if (structureChanged) {
             String person = assigneeText();
-            model.setRows(workbook == null ? List.of() : WbsFilter.visible(workbook.items(), person));
+            String nameKeyword = nameFilterField.getText();
+            model.setRows(workbook == null ? List.of() : WbsFilter.visible(workbook.items(), person, nameKeyword));
         } else {
             model.refreshValues();
         }
@@ -534,8 +573,14 @@ public final class MainFrame extends JFrame {
         } else if (assigneeText().isBlank()) {
             message = "担当者を指定してください。ファイルには " + workbook.items().size() + " 件あります。";
         } else if (rows.isEmpty()) {
-            message = "担当「" + assigneeText() + "」のWBSはありません。ファイルには "
-                    + workbook.items().size() + " 件あります。";
+            String nameKeyword = nameFilterField.getText().trim();
+            if (!nameKeyword.isEmpty()) {
+                message = "担当「" + assigneeText() + "」／項目名「" + nameKeyword + "」に合うWBSはありません。ファイルには "
+                        + workbook.items().size() + " 件あります。";
+            } else {
+                message = "担当「" + assigneeText() + "」のWBSはありません。ファイルには "
+                        + workbook.items().size() + " 件あります。";
+            }
         } else {
             message = summary(rows);
         }
