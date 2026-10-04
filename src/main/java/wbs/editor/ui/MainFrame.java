@@ -434,6 +434,11 @@ public final class MainFrame extends JFrame {
             prefs.put("lastAssignee", assigneeText());
             notice = "保存しました。";
             updateStatus();
+            JOptionPane.showMessageDialog(
+                    this,
+                    "保存しました。\n" + currentFile.getFileName(),
+                    "WBS実績入力",
+                    JOptionPane.INFORMATION_MESSAGE);
             return true;
         } catch (IOException | RuntimeException ex) {
             ex.printStackTrace();
