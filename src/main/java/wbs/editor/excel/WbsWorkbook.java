@@ -10,6 +10,7 @@ import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -165,7 +166,20 @@ public final class WbsWorkbook implements AutoCloseable {
         }
     }
 
-    public void save(Path path) throws IOException {
+    /**
+     * Writes the workbook to {@code path}. If that file already exists, copies it first under
+     * {@code ~/WBS実績入力/backup/} with a timestamp suffix
+     * (for example {@code book_20261004_160945.xlsx}).
+     *
+     * @return the backup path when a backup was created, otherwise empty
+     */
+    public Optional<Path> save(Path path) throws IOException {
+        Path backup = null;
+        if (Files.isRegularFile(path)) {
+            backup = backupPath(path);
+            Files.createDirectories(backup.getParent());
+            Files.copy(path, backup, StandardCopyOption.COPY_ATTRIBUTES);
+        }
         Path tmp = path.resolveSibling(path.getFileName().toString() + ".tmp");
         try {
             try (OutputStream out = Files.newOutputStream(tmp)) {
@@ -182,6 +196,28 @@ public final class WbsWorkbook implements AutoCloseable {
             Files.deleteIfExists(tmp);
             throw ex;
         }
+        return Optional.ofNullable(backup);
+    }
+
+    static Path backupDirectory() {
+        return Path.of(System.getProperty("user.home"), "WBS実績入力", "backup");
+    }
+
+    static Path backupPath(Path path) {
+        String name = path.getFileName().toString();
+        int dot = name.lastIndexOf('.');
+        String base = dot > 0 ? name.substring(0, dot) : name;
+        String extension = dot > 0 ? name.substring(dot) : "";
+        String stamp = java.time.LocalDateTime.now()
+                .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+        Path directory = backupDirectory();
+        Path candidate = directory.resolve(base + "_" + stamp + extension);
+        if (!Files.exists(candidate)) {
+            return candidate;
+        }
+        stamp = java.time.LocalDateTime.now()
+                .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss_SSS"));
+        return directory.resolve(base + "_" + stamp + extension);
     }
 
     /**

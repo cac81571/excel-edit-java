@@ -442,13 +442,17 @@ public final class MainFrame extends JFrame {
                 return false;
             }
             workbook.writeDay(currentDate);
-            workbook.save(currentFile);
+            var backup = workbook.save(currentFile);
             prefs.put("lastAssignee", assigneeText());
             notice = "保存しました。";
             updateStatus();
+            String message = "保存しました。\n" + currentFile.getFileName();
+            if (backup.isPresent()) {
+                message += "\n\nバックアップ:\n" + backup.get();
+            }
             JOptionPane.showMessageDialog(
                     this,
-                    "保存しました。\n" + currentFile.getFileName(),
+                    message,
                     "WBS実績入力",
                     JOptionPane.INFORMATION_MESSAGE);
             return true;

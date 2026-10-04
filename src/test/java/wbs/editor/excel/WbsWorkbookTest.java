@@ -1,5 +1,6 @@
 package wbs.editor.excel;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -11,6 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
 import org.apache.poi.ss.usermodel.CellType;
@@ -85,6 +87,28 @@ class WbsWorkbookTest {
             assertFalse(book.hasDate(missing));
             book.writeDay(missing);
             assertFalse(book.hasDate(missing));
+        }
+    }
+
+    @Test
+    void createsTimestampedBackupBeforeOverwrite() throws Exception {
+        Path file = sampleLikeScreenshot(temp.resolve("wbs.xlsx"));
+        byte[] before = Files.readAllBytes(file);
+        try (WbsWorkbook book = WbsWorkbook.open(file, new LayoutConfig())) {
+            book.loadDay(LocalDate.of(2026, 10, 4));
+            find(book, "1.1.1").setActual(9.0);
+            book.writeDay(LocalDate.of(2026, 10, 4));
+            Optional<Path> backup = book.save(file);
+            assertTrue(backup.isPresent());
+            assertTrue(Files.isRegularFile(backup.get()));
+            assertEquals(WbsWorkbook.backupDirectory(), backup.get().getParent());
+            assertTrue(backup.get().getFileName().toString().matches("wbs_\\d{8}_\\d{6}\\.xlsx"));
+            assertArrayEquals(before, Files.readAllBytes(backup.get()));
+            Files.deleteIfExists(backup.get());
+        }
+        try (WbsWorkbook book = WbsWorkbook.open(file, new LayoutConfig())) {
+            book.loadDay(LocalDate.of(2026, 10, 4));
+            assertEquals(9.0, find(book, "1.1.1").actual(), 0.001);
         }
     }
 
