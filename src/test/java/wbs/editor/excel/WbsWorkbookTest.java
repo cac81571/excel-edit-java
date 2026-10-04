@@ -58,8 +58,8 @@ class WbsWorkbookTest {
     }
 
     @Test
-    void insertsMissingDateWithoutLosingExistingHours() throws Exception {
-        Path file = sampleLikeScreenshot(temp.resolve("shift.xlsx"));
+    void rejectsMissingDateWithoutAddingColumn() throws Exception {
+        Path file = sampleLikeScreenshot(temp.resolve("missing-date.xlsx"));
         LocalDate october4 = LocalDate.of(2026, 10, 4);
         LocalDate september30 = LocalDate.of(2026, 9, 30);
         try (WbsWorkbook book = WbsWorkbook.open(file, new LayoutConfig())) {
@@ -67,27 +67,12 @@ class WbsWorkbookTest {
             WbsItem item = find(book, "1.1.1");
             item.setPlan(4.0);
             item.setActual(8.0);
-            book.writeDay(september30);
-            book.loadDay(october4);
-            assertEquals(2.5, find(book, "1.1.1").actual(), 0.001);
-            assertNull(find(book, "1.1.1").plan());
-            book.loadDay(september30);
-            assertEquals(4.0, find(book, "1.1.1").plan(), 0.001);
-            assertEquals(8.0, find(book, "1.1.1").actual(), 0.001);
-            book.save(file);
-        }
-
-        try (XSSFWorkbook workbook = new XSSFWorkbook(Files.newInputStream(file))) {
-            Sheet sheet = workbook.getSheetAt(0);
-            assertEquals("メモ", sheet.getRow(0).getCell(15).getStringCellValue());
-            assertEquals("9月30日", sheet.getRow(1).getCell(5).getStringCellValue());
-            assertEquals("水", sheet.getRow(2).getCell(5).getStringCellValue());
-            assertEquals("10月1日", sheet.getRow(1).getCell(6).getStringCellValue());
-            int october4Column = findHeader(sheet.getRow(1), "10月4日");
-            assertEquals(2.5, sheet.getRow(8).getCell(october4Column).getNumericCellValue(), 0.001);
-            assertEquals(9.0, sheet.getRow(16).getCell(october4Column).getNumericCellValue(), 0.001);
-            assertEquals(8.0, sheet.getRow(8).getCell(5).getNumericCellValue(), 0.001);
-            assertEquals(4.0, sheet.getRow(7).getCell(5).getNumericCellValue(), 0.001);
+            IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () -> book.writeDay(september30));
+            assertTrue(error.getMessage().contains("20260930"));
+            assertFalse(book.hasDate(september30));
+            assertEquals(8.0, item.actual(), 0.001);
+            assertEquals(4.0, item.plan(), 0.001);
+            assertTrue(item.isDirty());
         }
     }
 
@@ -252,7 +237,7 @@ class WbsWorkbookTest {
     }
 
     @Test
-    void appendsExcelDateColumnUsingExistingFormat() throws Exception {
+    void rejectsWriteWhenExcelDateColumnIsMissing() throws Exception {
         Path file = temp.resolve("dates.xlsx");
         try (XSSFWorkbook workbook = new XSSFWorkbook()) {
             Sheet sheet = workbook.createSheet();
@@ -286,20 +271,11 @@ class WbsWorkbookTest {
         try (WbsWorkbook book = WbsWorkbook.open(file, new LayoutConfig())) {
             book.loadDay(LocalDate.of(2026, 10, 1));
             find(book, "1").setActual(1.25);
-            book.writeDay(LocalDate.of(2026, 10, 3));
-            book.save(file);
-        }
-
-        try (XSSFWorkbook workbook = new XSSFWorkbook(Files.newInputStream(file))) {
-            Sheet sheet = workbook.getSheetAt(0);
-            Cell created = sheet.getRow(1).getCell(7);
-            assertEquals(CellType.NUMERIC, created.getCellType());
-            assertTrue(DateUtil.isCellDateFormatted(created));
-            assertEquals(LocalDate.of(2026, 10, 3), created.getLocalDateTimeCellValue().toLocalDate());
-            Cell weekday = sheet.getRow(2).getCell(7);
-            assertEquals(CellType.STRING, weekday.getCellType());
-            assertEquals("土", weekday.getStringCellValue());
-            assertEquals(1.25, sheet.getRow(4).getCell(7).getNumericCellValue(), 0.001);
+            IllegalArgumentException error = assertThrows(
+                    IllegalArgumentException.class,
+                    () -> book.writeDay(LocalDate.of(2026, 10, 3)));
+            assertTrue(error.getMessage().contains("20261003"));
+            assertFalse(book.hasDate(LocalDate.of(2026, 10, 3)));
         }
     }
 

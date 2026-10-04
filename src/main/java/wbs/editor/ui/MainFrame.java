@@ -424,11 +424,23 @@ public final class MainFrame extends JFrame {
             updateStatus();
             return true;
         }
+        if (!workbook.hasDate(currentDate)) {
+            error("日付 "
+                    + String.format("%04d%02d%02d", currentDate.getYear(), currentDate.getMonthValue(), currentDate.getDayOfMonth())
+                    + " の列がありません。\nExcelに日付列を追加してから保存してください。");
+            return false;
+        }
         return writeCurrent();
     }
 
     private boolean writeCurrent() {
         try {
+            if (!workbook.hasDate(currentDate)) {
+                error("日付 "
+                        + String.format("%04d%02d%02d", currentDate.getYear(), currentDate.getMonthValue(), currentDate.getDayOfMonth())
+                        + " の列がありません。\nExcelに日付列を追加してから保存してください。");
+                return false;
+            }
             workbook.writeDay(currentDate);
             workbook.save(currentFile);
             prefs.put("lastAssignee", assigneeText());
@@ -566,7 +578,7 @@ public final class MainFrame extends JFrame {
         builder.append("   実績合計 ").append(Hours.format(actual));
         appendSelection(builder, rows);
         if (!workbook.hasDate(currentDate)) {
-            builder.append("    この日付の列はありません。保存すると追加します。");
+            builder.append("    この日付の列はありません。保存できません。");
         }
         if (missingActual > 0) {
             builder.append("    実績行がない項目が ").append(missingActual).append(" 件あります。");

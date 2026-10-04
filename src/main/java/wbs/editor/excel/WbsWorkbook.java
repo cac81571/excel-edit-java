@@ -9,7 +9,6 @@ import java.nio.file.StandardCopyOption;
 import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.OptionalInt;
 import java.util.regex.Matcher;
@@ -28,7 +27,6 @@ import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.apache.poi.ooxml.POIXMLDocumentPart;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import wbs.editor.model.Hours;
-import wbs.editor.model.JapaneseDates;
 import wbs.editor.model.LayoutConfig;
 import wbs.editor.model.Text;
 import wbs.editor.model.WbsFilter;
@@ -146,16 +144,22 @@ public final class WbsWorkbook implements AutoCloseable {
         if (!dirty) {
             return;
         }
-        int column = ensureDateColumn(date);
+        OptionalInt column = columnOf(date);
+        if (column.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "日付 " + String.format("%04d%02d%02d", date.getYear(), date.getMonthValue(), date.getDayOfMonth())
+                            + " の列がありません。Excelに日付列を追加してから保存してください。");
+        }
+        int columnIndex = column.getAsInt();
         for (WbsItem item : items) {
             if (!item.isDirty()) {
                 continue;
             }
             if (item.planDirty() && item.planRow() >= 0) {
-                writeNumber(item.planRow(), column, item.plan());
+                writeNumber(item.planRow(), columnIndex, item.plan());
             }
             if (item.actualDirty() && item.actualRow() >= 0) {
-                writeNumber(item.actualRow(), column, item.actual());
+                writeNumber(item.actualRow(), columnIndex, item.actual());
             }
             item.markClean();
         }
@@ -364,161 +368,6 @@ public final class WbsWorkbook implements AutoCloseable {
         }
     }
 
-    private int ensureDateColumn(LocalDate date) {
-        OptionalInt existing = columnOf(date);
-        if (existing.isPresent()) {
-            return existing.getAsInt();
-        }
-        // Shared formulas break under shiftColumns; freeze header formulas to cached values first.
-        materializeHeaderFormulas();
-        HeaderSample dateSample = capture(layout.dateRow - 1);
-        HeaderSample weekdaySample = layout.weekdayRow > 0 ? capture(layout.weekdayRow - 1) : null;
-        int sampleWidth = dateColumns.isEmpty() ? 12 * 256 : sheet.getColumnWidth(dateColumns.get(0).column);
-        int insertAt = insertIndex(date);
-        int last = lastUsedColumn();
-        if (insertAt <= last) {
-            int count = last - insertAt + 1;
-            int[] widths = new int[count];
-            for (int i = 0; i < count; i++) {
-                widths[i] = sheet.getColumnWidth(insertAt + i);
-            }
-            sheet.shiftColumns(insertAt, last, 1);
-            for (int i = 0; i < count; i++) {
-                sheet.setColumnWidth(insertAt + 1 + i, widths[i]);
-            }
-            for (DateColumn column : dateColumns) {
-                if (column.column >= insertAt) {
-                    column.column++;
-                }
-            }
-        }
-        sheet.setColumnWidth(insertAt, sampleWidth);
-        writeHeader(layout.dateRow - 1, insertAt, date, dateSample, true);
-        if (layout.weekdayRow > 0 && layout.weekdayRow != layout.dateRow) {
-            writeHeader(layout.weekdayRow - 1, insertAt, date, weekdaySample, false);
-        }
-        DateColumn created = parseHeader(insertAt);
-        dateColumns.add(created == null ? DateColumn.exact(insertAt, date) : created);
-        dateColumns.sort(Comparator.comparingInt(column -> column.column));
-        return insertAt;
-    }
-
-    private void materializeHeaderFormulas() {
-        materializeRowFormulas(layout.dateRow - 1);
-        if (layout.weekdayRow > 0 && layout.weekdayRow != layout.dateRow) {
-            materializeRowFormulas(layout.weekdayRow - 1);
-        }
-        evaluator.clearAllCachedResultValues();
-    }
-
-    private void materializeRowFormulas(int rowIndex) {
-        if (rowIndex < 0) {
-            return;
-        }
-        for (DateColumn dateColumn : List.copyOf(dateColumns)) {
-            Cell cell = cell(rowIndex, dateColumn.column);
-            if (cell == null || cell.getCellType() != CellType.FORMULA) {
-                continue;
-            }
-            CellValue value = evaluator.evaluate(cell);
-            if (value == null) {
-                continue;
-            }
-            CellStyle style = cell.getCellStyle();
-            switch (value.getCellType()) {
-                case NUMERIC -> {
-                    cell.setCellValue(value.getNumberValue());
-                    if (style != null) {
-                        cell.setCellStyle(style);
-                    }
-                }
-                case STRING -> cell.setCellValue(value.getStringValue());
-                case BOOLEAN -> cell.setCellValue(value.getBooleanValue());
-                default -> cell.setBlank();
-            }
-        }
-    }
-
-    private int insertIndex(LocalDate date) {
-        if (dateColumns.isEmpty()) {
-            return layout.firstDateColumn;
-        }
-        for (DateColumn column : dateColumns) {
-            if (date.isBefore(column.sortKey(date.getYear()))) {
-                return column.column;
-            }
-        }
-        return dateColumns.get(dateColumns.size() - 1).column + 1;
-    }
-
-    private int lastUsedColumn() {
-        int last = 0;
-        for (int r = 0; r <= sheet.getLastRowNum(); r++) {
-            Row row = sheet.getRow(r);
-            if (row != null) {
-                last = Math.max(last, row.getLastCellNum() - 1);
-            }
-        }
-        return last;
-    }
-
-    private HeaderSample capture(int rowIndex) {
-        if (dateColumns.isEmpty() || rowIndex < 0) {
-            return new HeaderSample(null, false, "");
-        }
-        int column = dateColumns.get(0).column;
-        Cell cell = cell(rowIndex, column);
-        if (cell == null) {
-            return new HeaderSample(null, false, "");
-        }
-        return new HeaderSample(cell.getCellStyle(), isExcelDate(cell), readText(rowIndex, column));
-    }
-
-    private void writeHeader(int rowIndex, int column, LocalDate date, HeaderSample sample, boolean dateRow) {
-        Row row = sheet.getRow(rowIndex);
-        if (row == null) {
-            row = sheet.createRow(rowIndex);
-        }
-        Cell cell = row.getCell(column);
-        if (cell == null) {
-            cell = row.createCell(column);
-        }
-        if (sample != null && sample.excelDate && dateRow) {
-            if (sample.style != null) {
-                cell.setCellStyle(sample.style);
-            }
-            cell.setCellValue(date);
-            return;
-        }
-        String text = dateRow
-                ? formatLike(sample == null ? "" : sample.text, date)
-                : JapaneseDates.weekday(date);
-        if (sample != null && sample.style != null) {
-            cell.setCellStyle(sample.style);
-        }
-        cell.setCellValue(text);
-    }
-
-    static String formatLike(String sample, LocalDate date) {
-        String text = Text.halfWidth(sample).trim();
-        if (text.matches("\\d{4}-\\d{1,2}-\\d{1,2}")) {
-            return String.format("%04d-%02d-%02d", date.getYear(), date.getMonthValue(), date.getDayOfMonth());
-        }
-        if (text.matches("\\d{4}/\\d{1,2}/\\d{1,2}")) {
-            return date.getYear() + "/" + date.getMonthValue() + "/" + date.getDayOfMonth();
-        }
-        if (text.matches("\\d{4}年\\d{1,2}月\\d{1,2}日")) {
-            return date.getYear() + "年" + date.getMonthValue() + "月" + date.getDayOfMonth() + "日";
-        }
-        if (text.matches("\\d{1,2}/\\d{1,2}")) {
-            return date.getMonthValue() + "/" + date.getDayOfMonth();
-        }
-        if (text.matches("\\d{1,2}月0\\d日")) {
-            return String.format("%d月%02d日", date.getMonthValue(), date.getDayOfMonth());
-        }
-        return date.getMonthValue() + "月" + date.getDayOfMonth() + "日";
-    }
-
     private DateColumn parseHeader(int column) {
         Cell cell = cell(layout.dateRow - 1, column);
         if (cell == null) {
@@ -713,9 +562,6 @@ public final class WbsWorkbook implements AutoCloseable {
         return row.getCell(column);
     }
 
-    private record HeaderSample(CellStyle style, boolean excelDate, String text) {
-    }
-
     private static final class DateColumn {
         private int column;
         private final LocalDate exact;
@@ -782,17 +628,6 @@ public final class WbsWorkbook implements AutoCloseable {
                 return exact.equals(date);
             }
             return month == date.getMonthValue() && day == date.getDayOfMonth();
-        }
-
-        LocalDate sortKey(int year) {
-            if (exact != null) {
-                return exact;
-            }
-            try {
-                return LocalDate.of(year, month, day);
-            } catch (DateTimeException ex) {
-                return LocalDate.of(year, month, 1);
-            }
         }
     }
 }
