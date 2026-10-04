@@ -1,4 +1,5 @@
 target/
+*.class
 *.tmp
 *.bak
 .idea/
