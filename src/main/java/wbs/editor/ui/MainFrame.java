@@ -21,7 +21,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.text.ParseException;
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.OptionalInt;
@@ -228,6 +227,16 @@ public final class MainFrame extends JFrame {
 
     private void buildActions() {
         dateSpinner.addChangeListener(event -> onDateChanged());
+        if (dateSpinner.getEditor() instanceof JSpinner.DefaultEditor editor) {
+            JFormattedTextField field = editor.getTextField();
+            field.addActionListener(event -> applyTypedDate());
+            field.addFocusListener(new java.awt.event.FocusAdapter() {
+                @Override
+                public void focusLost(java.awt.event.FocusEvent event) {
+                    applyTypedDate();
+                }
+            });
+        }
         model.addTableModelListener(event -> {
             if (event.getType() == TableModelEvent.UPDATE && event.getColumn() >= 0) {
                 notice = "";
@@ -479,21 +488,27 @@ public final class MainFrame extends JFrame {
                 return false;
             }
             workbook.writeDay(currentDate);
-            var backup = workbook.save(currentFile);
-            settings.put("lastAssignee", assigneeText());
-            persistSettings();
-            notice = "保存しました。";
-            updateStatus();
-            String message = "保存しました。\n" + currentFile.getFileName();
-            if (backup.isPresent()) {
-                message += "\n\nバックアップ:\n" + backup.get();
+            try {
+                var backup = workbook.save(currentFile);
+                workbook.markClean();
+                settings.put("lastAssignee", assigneeText());
+                persistSettings();
+                notice = "保存しました。";
+                updateStatus();
+                String message = "保存しました。\n" + currentFile.getFileName();
+                if (backup.isPresent()) {
+                    message += "\n\nバックアップ:\n" + backup.get();
+                }
+                JOptionPane.showMessageDialog(
+                        this,
+                        message,
+                        "WBS実績入力",
+                        JOptionPane.INFORMATION_MESSAGE);
+                return true;
+            } catch (IOException | RuntimeException ex) {
+                workbook.restoreDay(currentDate);
+                throw ex;
             }
-            JOptionPane.showMessageDialog(
-                    this,
-                    message,
-                    "WBS実績入力",
-                    JOptionPane.INFORMATION_MESSAGE);
-            return true;
         } catch (IOException | RuntimeException ex) {
             ex.printStackTrace();
             error("保存できませんでした。\nExcelで開いているときは閉じてください。\n" + message(ex));
@@ -547,6 +562,18 @@ public final class MainFrame extends JFrame {
                 applyFilters();
             }
         };
+    }
+
+    private void applyTypedDate() {
+        if (adjusting || suppressDateEvents) {
+            return;
+        }
+        LocalDate typed = readSpinnerCommit();
+        if (!typed.equals(currentDate)) {
+            onDateChanged();
+        } else if (dateSpinner.getEditor() instanceof JSpinner.DefaultEditor editor) {
+            editor.getTextField().setValue(typed);
+        }
     }
 
     private void onDateChanged() {
@@ -842,7 +869,8 @@ public final class MainFrame extends JFrame {
         JSpinner spinner = new JSpinner(new DaySpinnerModel(date));
         spinner.setEditor(new DaySpinnerEditor(spinner));
         Dimension size = spinner.getPreferredSize();
-        spinner.setPreferredSize(new Dimension(120, size.height));
+        spinner.setPreferredSize(new Dimension(130, size.height));
+        spinner.setToolTipText("YYYYMMDD で直接入力できます（例: 20261006）");
         return spinner;
     }
 
@@ -885,14 +913,17 @@ public final class MainFrame extends JFrame {
             super(spinner);
             JFormattedTextField field = getTextField();
             field.setFormatterFactory(new DefaultFormatterFactory(new YyyymmddFormatter()));
+            field.setFocusLostBehavior(JFormattedTextField.COMMIT_OR_REVERT);
+            field.setEditable(true);
             field.setHorizontalAlignment(JTextField.LEFT);
             field.setColumns(8);
             field.setValue(spinner.getValue());
+            field.setToolTipText("YYYYMMDD で直接入力（例: 20261006）");
             OverwriteOnType.install(field);
         }
     }
 
-    /** First printable key after focus replaces the whole value instead of appending. */
+    /** First printable key replaces the value only when the whole field is selected. */
     private static final class OverwriteOnType {
         private OverwriteOnType() {
         }
@@ -906,6 +937,13 @@ public final class MainFrame extends JFrame {
                     javax.swing.SwingUtilities.invokeLater(field::selectAll);
                 }
             });
+            field.addCaretListener(event -> {
+                String text = field.getText();
+                int length = text == null ? 0 : text.length();
+                if (field.getSelectionStart() != 0 || field.getSelectionEnd() != length) {
+                    replace[0] = false;
+                }
+            });
             field.addKeyListener(new java.awt.event.KeyAdapter() {
                 @Override
                 public void keyTyped(java.awt.event.KeyEvent event) {
@@ -913,7 +951,13 @@ public final class MainFrame extends JFrame {
                     if (!replace[0] || Character.isISOControl(ch) || ch == KeyEvent.CHAR_UNDEFINED) {
                         return;
                     }
+                    String text = field.getText();
+                    int length = text == null ? 0 : text.length();
+                    boolean wholeSelected = field.getSelectionStart() == 0 && field.getSelectionEnd() == length;
                     replace[0] = false;
+                    if (!wholeSelected || length == 0) {
+                        return;
+                    }
                     field.setText(String.valueOf(ch));
                     event.consume();
                 }
@@ -922,12 +966,10 @@ public final class MainFrame extends JFrame {
     }
 
     private static final class YyyymmddFormatter extends JFormattedTextField.AbstractFormatter {
-        private static final DateTimeFormatter FORMAT = DateTimeFormatter.BASIC_ISO_DATE;
-
         @Override
         public Object stringToValue(String text) throws ParseException {
             try {
-                return LocalDate.parse(text.trim(), FORMAT);
+                return JapaneseDates.parseInput(text);
             } catch (DateTimeParseException ex) {
                 throw new ParseException(ex.getMessage(), 0);
             }
@@ -935,7 +977,7 @@ public final class MainFrame extends JFrame {
 
         @Override
         public String valueToString(Object value) {
-            return value == null ? "" : FORMAT.format((LocalDate) value);
+            return value == null ? "" : JapaneseDates.formatBasic((LocalDate) value);
         }
     }
 

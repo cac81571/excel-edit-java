@@ -163,6 +163,31 @@ public final class WbsWorkbook implements AutoCloseable {
             if (item.actualDirty() && item.actualRow() >= 0) {
                 writeNumber(item.actualRow(), columnIndex, item.actual());
             }
+        }
+    }
+
+    /** Restores sheet cells for dirty items to their last loaded values (used after a failed save). */
+    public void restoreDay(LocalDate date) {
+        OptionalInt column = columnOf(date);
+        if (column.isEmpty()) {
+            return;
+        }
+        int columnIndex = column.getAsInt();
+        for (WbsItem item : items) {
+            if (!item.isDirty()) {
+                continue;
+            }
+            if (item.planDirty() && item.planRow() >= 0) {
+                writeNumber(item.planRow(), columnIndex, item.loadedPlan());
+            }
+            if (item.actualDirty() && item.actualRow() >= 0) {
+                writeNumber(item.actualRow(), columnIndex, item.loadedActual());
+            }
+        }
+    }
+
+    public void markClean() {
+        for (WbsItem item : items) {
             item.markClean();
         }
     }

@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -83,6 +84,46 @@ class WbsWorkbookTest {
         try (WbsWorkbook book = WbsWorkbook.open(file, new LayoutConfig())) {
             assertEquals("", find(book, "1.1").assignee());
             assertFalse(book.assignees().contains("0"));
+        }
+    }
+
+    @Test
+    void keepsDirtyAndRestoresSheetWhenSaveFails() throws Exception {
+        Path file = sampleLikeScreenshot(temp.resolve("locked.xlsx"));
+        LocalDate october4 = LocalDate.of(2026, 10, 4);
+        try (WbsWorkbook book = WbsWorkbook.open(file, new LayoutConfig())) {
+            book.loadDay(october4);
+            WbsItem item = find(book, "1.1.1");
+            Double original = item.actual();
+            item.setActual(9.0);
+            book.writeDay(october4);
+            assertTrue(item.isDirty());
+            assertEquals(9.0, item.actual(), 0.001);
+
+            Path blocked = temp.resolve("missing-dir").resolve("out.xlsx");
+            assertThrows(IOException.class, () -> book.save(blocked));
+            book.restoreDay(october4);
+            assertTrue(item.isDirty());
+            assertEquals(9.0, item.actual(), 0.001);
+
+            book.loadDay(october4);
+            assertEquals(original, find(book, "1.1.1").actual());
+            assertFalse(find(book, "1.1.1").isDirty());
+        }
+    }
+
+    @Test
+    void markCleanOnlyAfterSuccessfulSave() throws Exception {
+        Path file = sampleLikeScreenshot(temp.resolve("mark-clean.xlsx"));
+        LocalDate october4 = LocalDate.of(2026, 10, 4);
+        try (WbsWorkbook book = WbsWorkbook.open(file, new LayoutConfig())) {
+            book.loadDay(october4);
+            find(book, "1.1.1").setActual(9.0);
+            book.writeDay(october4);
+            assertTrue(book.isDirty());
+            book.save(file);
+            book.markClean();
+            assertFalse(book.isDirty());
         }
     }
 

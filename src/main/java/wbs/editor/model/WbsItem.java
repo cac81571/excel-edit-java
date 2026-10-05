@@ -70,6 +70,14 @@ public final class WbsItem {
         this.actual = actual;
     }
 
+    public Double loadedPlan() {
+        return loadedPlan;
+    }
+
+    public Double loadedActual() {
+        return loadedActual;
+    }
+
     public void load(Double plan, Double actual) {
         this.plan = plan;
         this.actual = actual;
