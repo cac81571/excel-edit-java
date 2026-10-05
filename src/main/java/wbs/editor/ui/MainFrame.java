@@ -21,6 +21,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.text.ParseException;
 import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.OptionalInt;
@@ -74,6 +76,9 @@ public final class MainFrame extends JFrame {
     private static final Color PARENT_FOREGROUND = new Color(0x4A5560);
     private static final Color INPUT_BACKGROUND = new Color(0xFFF6D8);
     private static final Color HINT_FOREGROUND = new Color(0x667085);
+    private static final Color SHARED_FOREGROUND = new Color(0xB54708);
+    private static final DateTimeFormatter FILE_TIME_FORMAT =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final AppSettings settings = AppSettings.load();
     private LayoutConfig layout = LayoutConfig.load(settings);
@@ -89,6 +94,7 @@ public final class MainFrame extends JFrame {
     private final JLabel summaryLabel = new JLabel(" ");
     private final JLabel selectionLabel = new JLabel(" ");
     private final JLabel layoutLabel = new JLabel(" ");
+    private final JLabel fileInfoLabel = new JLabel(" ");
     private final JList<String> rowHeader = new JList<>();
     private final JButton loadButton = new JButton("読み込み");
     private final JButton saveButton = new JButton("保存");
@@ -208,15 +214,22 @@ public final class MainFrame extends JFrame {
 
         layoutLabel.setForeground(HINT_FOREGROUND);
         layoutLabel.setFont(layoutLabel.getFont().deriveFont(12f));
+        fileInfoLabel.setForeground(HINT_FOREGROUND);
+        fileInfoLabel.setFont(layoutLabel.getFont());
+        fileInfoLabel.setHorizontalAlignment(SwingConstants.RIGHT);
         configureRowHeader();
 
         JScrollPane scroll = new JScrollPane(table);
         scroll.setRowHeaderView(rowHeader);
+        JPanel south = new JPanel(new BorderLayout(12, 0));
+        south.setOpaque(false);
+        south.add(layoutLabel, BorderLayout.CENTER);
+        south.add(fileInfoLabel, BorderLayout.EAST);
         JPanel root = new JPanel(new BorderLayout(0, 8));
         root.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
         root.add(form, BorderLayout.NORTH);
         root.add(scroll, BorderLayout.CENTER);
-        root.add(layoutLabel, BorderLayout.SOUTH);
+        root.add(south, BorderLayout.SOUTH);
         setContentPane(root);
 
         TransferHandler drop = new FileDropHandler();
@@ -509,6 +522,9 @@ public final class MainFrame extends JFrame {
                 workbook.restoreDay(currentDate);
                 throw ex;
             }
+        } catch (WbsWorkbook.ConcurrentFileChangeException ex) {
+            error(ex.getMessage());
+            return false;
         } catch (IOException | RuntimeException ex) {
             ex.printStackTrace();
             error("保存できませんでした。\nExcelで開いているときは閉じてください。\n" + message(ex));
@@ -701,8 +717,31 @@ public final class MainFrame extends JFrame {
         String layoutText = layout.summary(resolved);
         layoutLabel.setText(layoutText);
         layoutLabel.setToolTipText(layoutText);
+        updateFileInfo();
         boolean opened = workbook != null;
         saveButton.setEnabled(opened);
+    }
+
+    private void updateFileInfo() {
+        if (workbook == null) {
+            fileInfoLabel.setText(" ");
+            fileInfoLabel.setToolTipText(null);
+            fileInfoLabel.setForeground(HINT_FOREGROUND);
+            return;
+        }
+        boolean shared = workbook.isLegacyShared();
+        String share = shared ? "共有ブック" : "通常ブック";
+        String time = workbook.loadedFileTime()
+                .map(fileTime -> FILE_TIME_FORMAT.format(
+                        fileTime.toInstant().atZone(ZoneId.systemDefault())))
+                .orElse("—");
+        String text = share + " ／ 更新 " + time;
+        fileInfoLabel.setText(text);
+        fileInfoLabel.setToolTipText(
+                shared
+                        ? "レガシー共有ブックです。読み込み時点のファイル更新日時: " + time
+                        : "読み込み時点（または直前の保存後）のファイル更新日時: " + time);
+        fileInfoLabel.setForeground(shared ? SHARED_FOREGROUND : HINT_FOREGROUND);
     }
 
     private SummaryParts summary(List<WbsRow> rows) {

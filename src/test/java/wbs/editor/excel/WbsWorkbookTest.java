@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -124,6 +125,47 @@ class WbsWorkbookTest {
             book.save(file);
             book.markClean();
             assertFalse(book.isDirty());
+        }
+    }
+
+    @Test
+    void rejectsSaveWhenFileChangedExternally() throws Exception {
+        Path file = sampleLikeScreenshot(temp.resolve("stale.xlsx"));
+        LocalDate october4 = LocalDate.of(2026, 10, 4);
+        try (WbsWorkbook book = WbsWorkbook.open(file, new LayoutConfig())) {
+            book.loadDay(october4);
+            find(book, "1.1.1").setActual(9.0);
+            book.writeDay(october4);
+            Files.setLastModifiedTime(file, FileTime.fromMillis(Files.getLastModifiedTime(file).toMillis() + 5_000));
+            assertThrows(WbsWorkbook.ConcurrentFileChangeException.class, () -> book.save(file));
+            assertTrue(book.isDirty());
+        }
+    }
+
+    @Test
+    void allowsSaveAgainAfterSuccessfulSaveUpdatesTimestamp() throws Exception {
+        Path file = sampleLikeScreenshot(temp.resolve("resave.xlsx"));
+        LocalDate october4 = LocalDate.of(2026, 10, 4);
+        try (WbsWorkbook book = WbsWorkbook.open(file, new LayoutConfig())) {
+            book.loadDay(october4);
+            find(book, "1.1.1").setActual(9.0);
+            book.writeDay(october4);
+            book.save(file);
+            book.markClean();
+            find(book, "1.1.1").setActual(8.0);
+            book.writeDay(october4);
+            book.save(file);
+            book.markClean();
+            assertFalse(book.isDirty());
+        }
+    }
+
+    @Test
+    void normalWorkbookIsNotLegacyShared() throws Exception {
+        Path file = sampleLikeScreenshot(temp.resolve("normal.xlsx"));
+        try (WbsWorkbook book = WbsWorkbook.open(file, new LayoutConfig())) {
+            assertFalse(book.isLegacyShared());
+            assertTrue(book.loadedFileTime().isPresent());
         }
     }
 

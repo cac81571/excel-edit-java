@@ -6,14 +6,17 @@ import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.FileTime;
 import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.apache.poi.openxml4j.opc.PackagePart;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
 import org.apache.poi.ss.usermodel.CellType;
@@ -48,6 +51,8 @@ public final class WbsWorkbook implements AutoCloseable {
     private final List<WbsItem> items;
     private final List<DateColumn> dateColumns = new ArrayList<>();
     private CellStyle hoursStyle;
+    /** Last-modified time of the source file when it was opened (or last saved by this app). */
+    private FileTime loadedFileTime;
 
     private WbsWorkbook(Workbook workbook, LayoutConfig layout) {
         this.workbook = workbook;
@@ -60,13 +65,51 @@ public final class WbsWorkbook implements AutoCloseable {
     }
 
     public static WbsWorkbook open(Path path, LayoutConfig layout) throws IOException {
+        FileTime modified = Files.getLastModifiedTime(path);
         try (InputStream in = Files.newInputStream(path)) {
-            return new WbsWorkbook(WorkbookFactory.create(in), layout);
+            WbsWorkbook opened = new WbsWorkbook(WorkbookFactory.create(in), layout);
+            opened.loadedFileTime = modified;
+            return opened;
+        }
+    }
+
+    /**
+     * Thrown when the file on disk was changed after this workbook was loaded
+     * (or after the last successful save from this app).
+     */
+    public static final class ConcurrentFileChangeException extends IOException {
+        public ConcurrentFileChangeException() {
+            super("ファイルが読み込み後に他で更新されています。\n読み込み直してから再度保存してください。");
         }
     }
 
     public String sheetName() {
         return sheet.getSheetName();
+    }
+
+    public Optional<FileTime> loadedFileTime() {
+        return Optional.ofNullable(loadedFileTime);
+    }
+
+    /** True when the workbook looks like a legacy Excel shared workbook (共有ブック). */
+    public boolean isLegacyShared() {
+        if (!(workbook instanceof XSSFWorkbook xssf)) {
+            return false;
+        }
+        try {
+            for (PackagePart part : xssf.getPackage().getParts()) {
+                String name = part.getPartName().getName().toLowerCase(Locale.ROOT);
+                if (name.contains("/revisions/")
+                        || name.contains("revisionheaders")
+                        || name.endsWith("/users.xml")) {
+                    return true;
+                }
+            }
+            var ct = xssf.getCTWorkbook();
+            return ct != null && ct.isSetFileSharing();
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 
     public List<String> sheetNames() {
@@ -200,6 +243,7 @@ public final class WbsWorkbook implements AutoCloseable {
      * @return the backup path when a backup was created, otherwise empty
      */
     public Optional<Path> save(Path path) throws IOException {
+        checkNotModifiedExternally(path);
         Path backup = null;
         if (Files.isRegularFile(path)) {
             backup = backupPath(path);
@@ -222,7 +266,18 @@ public final class WbsWorkbook implements AutoCloseable {
             Files.deleteIfExists(tmp);
             throw ex;
         }
+        loadedFileTime = Files.getLastModifiedTime(path);
         return Optional.ofNullable(backup);
+    }
+
+    void checkNotModifiedExternally(Path path) throws IOException {
+        if (loadedFileTime == null || !Files.isRegularFile(path)) {
+            return;
+        }
+        FileTime current = Files.getLastModifiedTime(path);
+        if (current.toMillis() != loadedFileTime.toMillis()) {
+            throw new ConcurrentFileChangeException();
+        }
     }
 
     static Path backupDirectory() {
