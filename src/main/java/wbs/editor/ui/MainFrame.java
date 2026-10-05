@@ -31,6 +31,7 @@ import javax.swing.BorderFactory;
 import javax.swing.DefaultCellEditor;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JFileChooser;
@@ -82,6 +83,7 @@ public final class MainFrame extends JFrame {
     private final JTextField fileField = new JTextField();
     private final JComboBox<String> assigneeBox = new JComboBox<>();
     private final JTextField nameFilterField = new JTextField();
+    private final JCheckBox actualOnlyBox = new JCheckBox("実績ありのみ");
     private final JSpinner dateSpinner;
     private final JLabel weekdayLabel = new JLabel();
     private final JLabel totalsLabel = new JLabel(" ");
@@ -89,8 +91,8 @@ public final class MainFrame extends JFrame {
     private final JLabel selectionLabel = new JLabel(" ");
     private final JLabel layoutLabel = new JLabel(" ");
     private final JList<String> rowHeader = new JList<>();
+    private final JButton loadButton = new JButton("読み込み");
     private final JButton saveButton = new JButton("保存");
-    private final JButton reloadButton = new JButton("再読込");
 
     private WbsWorkbook workbook;
     private Path currentFile;
@@ -134,8 +136,8 @@ public final class MainFrame extends JFrame {
     private void buildMenu() {
         JMenuBar bar = new JMenuBar();
         JMenu file = new JMenu("ファイル");
-        file.add(menuItem("開く", KeyEvent.VK_O, event -> chooseFile()));
-        file.add(menuItem("再読込", KeyEvent.VK_R, event -> reload()));
+        file.add(menuItem("参照", KeyEvent.VK_O, event -> chooseFile()));
+        file.add(menuItem("読み込み", KeyEvent.VK_R, event -> openTypedFile()));
         file.add(menuItem("保存", KeyEvent.VK_S, event -> save()));
         file.addSeparator();
         file.add(menuItem("終了", KeyEvent.VK_Q, event -> closeWindow()));
@@ -157,27 +159,28 @@ public final class MainFrame extends JFrame {
         }
         nameFilterField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "項目名の一部");
         nameFilterField.getDocument().addDocumentListener(filterListener());
+        actualOnlyBox.addActionListener(event -> applyFilters());
 
-        JButton openButton = new JButton("開く");
-        openButton.addActionListener(event -> chooseFile());
-        reloadButton.addActionListener(event -> reload());
+        JButton browseButton = new JButton("参照");
+        browseButton.addActionListener(event -> chooseFile());
+        loadButton.addActionListener(event -> openTypedFile());
         saveButton.addActionListener(event -> save());
         JButton settingsButton = new JButton("配置設定");
         settingsButton.addActionListener(event -> editSettings());
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
         buttons.setOpaque(false);
-        buttons.add(reloadButton);
         buttons.add(saveButton);
         buttons.add(settingsButton);
 
         JPanel form = new JPanel(new GridBagLayout());
         form.add(new JLabel("Excel"), constraints(0, 0, 0));
         GridBagConstraints fileConstraints = constraints(1, 0, 1);
-        fileConstraints.gridwidth = 4;
+        fileConstraints.gridwidth = 3;
         fileConstraints.fill = GridBagConstraints.HORIZONTAL;
         form.add(fileField, fileConstraints);
-        form.add(openButton, constraints(5, 0, 0));
+        form.add(browseButton, constraints(4, 0, 0));
+        form.add(loadButton, constraints(5, 0, 0));
         form.add(new JLabel("担当"), constraints(0, 1, 0));
         form.add(assigneeBox, constraints(1, 1, 0));
         form.add(new JLabel("日付"), constraints(2, 1, 0));
@@ -190,9 +193,10 @@ public final class MainFrame extends JFrame {
         form.add(buttons, constraints(5, 1, 0));
         form.add(new JLabel("項目名"), constraints(0, 2, 0));
         GridBagConstraints nameConstraints = constraints(1, 2, 1);
-        nameConstraints.gridwidth = 5;
+        nameConstraints.gridwidth = 4;
         nameConstraints.fill = GridBagConstraints.HORIZONTAL;
         form.add(nameFilterField, nameConstraints);
+        form.add(actualOnlyBox, constraints(5, 2, 0));
         JPanel summaryRow = new JPanel(new BorderLayout(12, 0));
         summaryRow.setOpaque(false);
         summaryRow.add(summaryLabel, BorderLayout.WEST);
@@ -355,21 +359,27 @@ public final class MainFrame extends JFrame {
 
     private void chooseFile() {
         JFileChooser chooser = new JFileChooser();
-        chooser.setDialogTitle("WBSのExcelを開く");
+        chooser.setDialogTitle("WBSのExcelを選択");
         chooser.setFileFilter(new FileNameExtensionFilter("Excel ファイル (*.xlsx, *.xls)", "xlsx", "xls"));
         String directory = settings.get("lastDir", "");
         if (!directory.isBlank()) {
             chooser.setCurrentDirectory(new File(directory));
         }
         if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-            openFile(chooser.getSelectedFile().toPath());
+            Path selected = chooser.getSelectedFile().toPath().toAbsolutePath();
+            fileField.setText(selected.toString());
+            if (selected.getParent() != null) {
+                settings.put("lastDir", selected.getParent().toString());
+                persistSettings();
+            }
+            fileField.requestFocusInWindow();
         }
     }
 
     private void openTypedFile() {
         String text = fileField.getText().trim();
         if (text.isEmpty()) {
-            chooseFile();
+            error("Excelファイルのパスを入力するか、参照で選択してください。");
             return;
         }
         openFile(Path.of(text));
@@ -425,16 +435,6 @@ public final class MainFrame extends JFrame {
             ex.printStackTrace();
             error("ファイルを開けません。\nExcelで開いているときは閉じてください。\n" + message(ex));
         }
-    }
-
-    private void reload() {
-        if (currentFile == null) {
-            return;
-        }
-        if (workbook != null && workbook.isDirty() && !confirmSaveIfDirty("ファイルを読み込み直します。")) {
-            return;
-        }
-        loadFile(currentFile);
     }
 
     private boolean save() {
@@ -576,7 +576,13 @@ public final class MainFrame extends JFrame {
         if (structureChanged) {
             String person = assigneeText();
             String nameKeyword = nameFilterField.getText();
-            model.setRows(workbook == null ? List.of() : WbsFilter.visible(workbook.items(), person, nameKeyword));
+            model.setRows(workbook == null
+                    ? List.of()
+                    : WbsFilter.visible(
+                            workbook.items(),
+                            person,
+                            nameKeyword,
+                            actualOnlyBox.isSelected()));
         } else {
             model.refreshValues();
         }
@@ -624,8 +630,16 @@ public final class MainFrame extends JFrame {
             message = "担当者を指定してください。ファイルには " + workbook.items().size() + " 件あります。";
         } else if (rows.isEmpty()) {
             String nameKeyword = nameFilterField.getText().trim();
-            if (!nameKeyword.isEmpty()) {
-                message = "担当「" + assigneeText() + "」／項目名「" + nameKeyword + "」に合うWBSはありません。ファイルには "
+            boolean actualOnly = actualOnlyBox.isSelected();
+            if (!nameKeyword.isEmpty() || actualOnly) {
+                StringBuilder filter = new StringBuilder("担当「" + assigneeText() + "」");
+                if (!nameKeyword.isEmpty()) {
+                    filter.append("／項目名「").append(nameKeyword).append("」");
+                }
+                if (actualOnly) {
+                    filter.append("／実績あり");
+                }
+                message = filter + "に合うWBSはありません。ファイルには "
                         + workbook.items().size() + " 件あります。";
             } else {
                 message = "担当「" + assigneeText() + "」のWBSはありません。ファイルには "
@@ -654,7 +668,6 @@ public final class MainFrame extends JFrame {
         layoutLabel.setToolTipText(layoutText);
         boolean opened = workbook != null;
         saveButton.setEnabled(opened);
-        reloadButton.setEnabled(opened);
     }
 
     private SummaryParts summary(List<WbsRow> rows) {

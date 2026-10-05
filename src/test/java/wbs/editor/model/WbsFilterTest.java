@@ -29,6 +29,28 @@ class WbsFilterTest {
         assertEquals(List.of("1", "1.1", "1.1.1", "1.1.2", "1.10"), wbsOf(rows));
     }
 
+    @Test
+    void actualOnlyKeepsParentsOfMatches() {
+        List<WbsItem> items = sample();
+        WbsFilter.linkParents(items);
+        item(items, "1.1.1").setActual(2.0);
+        List<WbsRow> rows = WbsFilter.visible(items, "菅原", "", true);
+
+        assertEquals(List.of("1", "1.1", "1.1.1"), wbsOf(rows));
+        assertFalse(row(rows, "1").owned());
+        assertFalse(row(rows, "1.1").owned());
+        assertTrue(row(rows, "1.1.1").owned());
+    }
+
+    @Test
+    void actualZeroCountsAsEntered() {
+        List<WbsItem> items = sample();
+        WbsFilter.linkParents(items);
+        item(items, "1.1.2").setActual(0.0);
+        List<WbsRow> rows = WbsFilter.visible(items, "菅原", "", true);
+        assertEquals(List.of("1", "1.1", "1.1.2"), wbsOf(rows));
+    }
+
     private static List<WbsItem> sample() {
         List<WbsItem> items = new ArrayList<>();
         items.add(item(1, "1", "大項目", ""));
@@ -49,5 +71,9 @@ class WbsFilterTest {
 
     private static WbsRow row(List<WbsRow> rows, String wbs) {
         return rows.stream().filter(row -> row.item().wbsNo().equals(wbs)).findFirst().orElseThrow();
+    }
+
+    private static WbsItem item(List<WbsItem> items, String wbs) {
+        return items.stream().filter(entry -> entry.wbsNo().equals(wbs)).findFirst().orElseThrow();
     }
 }

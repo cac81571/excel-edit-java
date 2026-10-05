@@ -49,10 +49,15 @@ public final class WbsFilter {
     }
 
     public static List<WbsRow> visible(List<WbsItem> items, String person) {
-        return visible(items, person, "");
+        return visible(items, person, "", false);
     }
 
     public static List<WbsRow> visible(List<WbsItem> items, String person, String nameKeyword) {
+        return visible(items, person, nameKeyword, false);
+    }
+
+    public static List<WbsRow> visible(
+            List<WbsItem> items, String person, String nameKeyword, boolean onlyWithActual) {
         String keyword = Text.normalize(nameKeyword).toLowerCase(Locale.ROOT);
         boolean[] keep = new boolean[items.size()];
         boolean[] owned = new boolean[items.size()];
@@ -62,6 +67,9 @@ public final class WbsFilter {
                 continue;
             }
             if (!keyword.isEmpty() && !nameContains(item.name(), keyword)) {
+                continue;
+            }
+            if (onlyWithActual && item.actual() == null) {
                 continue;
             }
             owned[i] = true;
