@@ -60,6 +60,33 @@ class WbsWorkbookTest {
     }
 
     @Test
+    void treatsNumericZeroAssigneeAsBlank() throws Exception {
+        Path file = temp.resolve("zero-assignee.xlsx");
+        try (XSSFWorkbook workbook = new XSSFWorkbook()) {
+            Sheet sheet = workbook.createSheet("WBS");
+            Row dates = sheet.createRow(1);
+            dates.createCell(5).setCellValue("10月4日");
+            sheet.createRow(2);
+            int row = 3;
+            row = pair(sheet, row, 1, "1", "大項目", "", null);
+            Row plan = sheet.createRow(row);
+            plan.createCell(0).setCellValue(3);
+            plan.createCell(1).setCellValue("1.1");
+            plan.createCell(2).setCellValue("ゼロ担当");
+            plan.createCell(3).setCellValue(0);
+            plan.createCell(4).setCellValue("予定");
+            sheet.createRow(row + 1).createCell(4).setCellValue("実績");
+            try (OutputStream out = Files.newOutputStream(file)) {
+                workbook.write(out);
+            }
+        }
+        try (WbsWorkbook book = WbsWorkbook.open(file, new LayoutConfig())) {
+            assertEquals("", find(book, "1.1").assignee());
+            assertFalse(book.assignees().contains("0"));
+        }
+    }
+
+    @Test
     void rejectsMissingDateWithoutAddingColumn() throws Exception {
         Path file = sampleLikeScreenshot(temp.resolve("missing-date.xlsx"));
         LocalDate october4 = LocalDate.of(2026, 10, 4);

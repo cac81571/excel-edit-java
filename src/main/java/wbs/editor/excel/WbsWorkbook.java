@@ -317,10 +317,10 @@ public final class WbsWorkbook implements AutoCloseable {
             int identityRow = hasIdentity(planRow) ? planRow : actualRow;
             String wbs = readText(identityRow, layout.wbsColumn);
             String name = readText(identityRow, layout.nameColumn);
-            String assignee = readText(identityRow, layout.assigneeColumn);
+            String assignee = readAssignee(identityRow);
             if (assignee.isEmpty() && actualRow >= 0 && planRow >= 0) {
                 int other = identityRow == planRow ? actualRow : planRow;
-                assignee = readText(other, layout.assigneeColumn);
+                assignee = readAssignee(other);
             }
             int level = parseLevel(readText(identityRow, layout.levelColumn), wbs);
             loaded.add(new WbsItem(level, wbs, name, assignee, planRow, actualRow));
@@ -358,7 +358,7 @@ public final class WbsWorkbook implements AutoCloseable {
         return !readText(row, layout.levelColumn).isEmpty()
                 || !readText(row, layout.wbsColumn).isEmpty()
                 || !readText(row, layout.nameColumn).isEmpty()
-                || !readText(row, layout.assigneeColumn).isEmpty();
+                || !readAssignee(row).isEmpty();
     }
 
     private String kindAt(int row) {
@@ -558,6 +558,25 @@ public final class WbsWorkbook implements AutoCloseable {
             return null;
         }
         return null;
+    }
+
+    private String readAssignee(int rowIndex) {
+        return normalizeAssignee(readText(rowIndex, layout.assigneeColumn));
+    }
+
+    private static String normalizeAssignee(String text) {
+        String value = text == null ? "" : text.trim();
+        if (value.isEmpty() || "0".equals(value)) {
+            return "";
+        }
+        try {
+            if (Double.parseDouble(value) == 0.0) {
+                return "";
+            }
+        } catch (NumberFormatException ignored) {
+            // keep non-numeric assignee text
+        }
+        return value;
     }
 
     private String readText(int rowIndex, int column) {

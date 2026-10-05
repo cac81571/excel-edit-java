@@ -154,7 +154,7 @@ public final class MainFrame extends JFrame {
         assigneeBox.setEditable(true);
         assigneeBox.setPreferredSize(new Dimension(180, assigneeBox.getPreferredSize().height));
         if (assigneeBox.getEditor().getEditorComponent() instanceof JTextField editor) {
-            editor.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "担当者名");
+            editor.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "空欄で全件");
             editor.getDocument().addDocumentListener(filterListener());
         }
         nameFilterField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "項目名の一部");
@@ -626,23 +626,31 @@ public final class MainFrame extends JFrame {
             message = "Excelファイルを開いてください。";
         } else if (workbook.items().isEmpty()) {
             message = "WBSを読み取れませんでした。配置設定のデータ開始行と列を確認してください。";
-        } else if (assigneeText().isBlank()) {
-            message = "担当者を指定してください。ファイルには " + workbook.items().size() + " 件あります。";
         } else if (rows.isEmpty()) {
+            String assignee = assigneeText().trim();
             String nameKeyword = nameFilterField.getText().trim();
             boolean actualOnly = actualOnlyBox.isSelected();
-            if (!nameKeyword.isEmpty() || actualOnly) {
-                StringBuilder filter = new StringBuilder("担当「" + assigneeText() + "」");
-                if (!nameKeyword.isEmpty()) {
-                    filter.append("／項目名「").append(nameKeyword).append("」");
+            StringBuilder filter = new StringBuilder();
+            if (!assignee.isEmpty()) {
+                filter.append("担当「").append(assignee).append("」");
+            }
+            if (!nameKeyword.isEmpty()) {
+                if (!filter.isEmpty()) {
+                    filter.append("／");
                 }
-                if (actualOnly) {
-                    filter.append("／実績あり");
+                filter.append("項目名「").append(nameKeyword).append("」");
+            }
+            if (actualOnly) {
+                if (!filter.isEmpty()) {
+                    filter.append("／");
                 }
+                filter.append("実績あり");
+            }
+            if (!filter.isEmpty()) {
                 message = filter + "に合うWBSはありません。ファイルには "
                         + workbook.items().size() + " 件あります。";
             } else {
-                message = "担当「" + assigneeText() + "」のWBSはありません。ファイルには "
+                message = "表示できるWBSはありません。ファイルには "
                         + workbook.items().size() + " 件あります。";
             }
         } else {

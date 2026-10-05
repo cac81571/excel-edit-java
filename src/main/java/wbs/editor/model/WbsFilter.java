@@ -112,7 +112,7 @@ public final class WbsFilter {
     public static boolean assignedTo(String assigneeCell, String person) {
         String wanted = Text.normalize(person);
         if (wanted.isEmpty()) {
-            return false;
+            return true;
         }
         String cell = Text.normalize(assigneeCell);
         if (cell.equals(wanted)) {

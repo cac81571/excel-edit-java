@@ -51,6 +51,26 @@ class WbsFilterTest {
         assertEquals(List.of("1", "1.1", "1.1.2"), wbsOf(rows));
     }
 
+    @Test
+    void blankAssigneeShowsAll() {
+        List<WbsItem> items = sample();
+        WbsFilter.linkParents(items);
+        List<WbsRow> rows = WbsFilter.visible(items, "", "");
+        assertEquals(List.of("1", "1.1", "1.1.1", "1.1.2", "1.10"), wbsOf(rows));
+        assertTrue(rows.stream().allMatch(WbsRow::owned));
+    }
+
+    @Test
+    void blankAssigneeStillAppliesNameFilter() {
+        List<WbsItem> items = sample();
+        WbsFilter.linkParents(items);
+        List<WbsRow> rows = WbsFilter.visible(items, "  ", "小項目1");
+        assertEquals(List.of("1", "1.1", "1.1.1"), wbsOf(rows));
+        assertFalse(row(rows, "1").owned());
+        assertFalse(row(rows, "1.1").owned());
+        assertTrue(row(rows, "1.1.1").owned());
+    }
+
     private static List<WbsItem> sample() {
         List<WbsItem> items = new ArrayList<>();
         items.add(item(1, "1", "大項目", ""));
