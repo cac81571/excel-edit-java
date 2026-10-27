@@ -86,6 +86,7 @@ public final class MainFrame extends JFrame {
     private final JTable table = createTable();
     private final JTextField fileField = new JTextField();
     private final JComboBox<String> assigneeBox = new JComboBox<>();
+    private final JTextField wbsFilterField = new JTextField();
     private final JTextField nameFilterField = new JTextField();
     private final JCheckBox actualOnlyBox = new JCheckBox("実績ありのみ");
     private final JSpinner dateSpinner;
@@ -162,6 +163,9 @@ public final class MainFrame extends JFrame {
             editor.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "空欄で全件");
             editor.getDocument().addDocumentListener(filterListener());
         }
+        wbsFilterField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "完全一致");
+        wbsFilterField.setPreferredSize(new Dimension(180, wbsFilterField.getPreferredSize().height));
+        wbsFilterField.getDocument().addDocumentListener(filterListener());
         nameFilterField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "項目名の一部");
         nameFilterField.getDocument().addDocumentListener(filterListener());
         actualOnlyBox.addActionListener(event -> applyFilters());
@@ -196,9 +200,11 @@ public final class MainFrame extends JFrame {
         dateExtras.add(totalsLabel);
         form.add(dateExtras, constraints(4, 1, 1));
         form.add(buttons, constraints(5, 1, 0));
-        form.add(new JLabel("項目名"), constraints(0, 2, 0));
-        GridBagConstraints nameConstraints = constraints(1, 2, 1);
-        nameConstraints.gridwidth = 4;
+        form.add(new JLabel("WBS No"), constraints(0, 2, 0));
+        form.add(wbsFilterField, constraints(1, 2, 0));
+        form.add(new JLabel("項目名"), constraints(2, 2, 0));
+        GridBagConstraints nameConstraints = constraints(3, 2, 1);
+        nameConstraints.gridwidth = 2;
         nameConstraints.fill = GridBagConstraints.HORIZONTAL;
         form.add(nameFilterField, nameConstraints);
         form.add(actualOnlyBox, constraints(5, 2, 0));
@@ -618,12 +624,14 @@ public final class MainFrame extends JFrame {
     private void refreshTable(boolean structureChanged) {
         if (structureChanged) {
             String person = assigneeText();
+            String wbsNo = wbsFilterField.getText();
             String nameKeyword = nameFilterField.getText();
             model.setRows(workbook == null
                     ? List.of()
                     : WbsFilter.visible(
                             workbook.items(),
                             person,
+                            wbsNo,
                             nameKeyword,
                             actualOnlyBox.isSelected()));
         } else {
@@ -671,11 +679,18 @@ public final class MainFrame extends JFrame {
             message = "WBSを読み取れませんでした。配置設定のデータ開始行と列を確認してください。";
         } else if (rows.isEmpty()) {
             String assignee = assigneeText().trim();
+            String wbsNo = wbsFilterField.getText().trim();
             String nameKeyword = nameFilterField.getText().trim();
             boolean actualOnly = actualOnlyBox.isSelected();
             StringBuilder filter = new StringBuilder();
             if (!assignee.isEmpty()) {
                 filter.append("担当「").append(assignee).append("」");
+            }
+            if (!wbsNo.isEmpty()) {
+                if (!filter.isEmpty()) {
+                    filter.append("／");
+                }
+                filter.append("WBS No「").append(wbsNo).append("」");
             }
             if (!nameKeyword.isEmpty()) {
                 if (!filter.isEmpty()) {

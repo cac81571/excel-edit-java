@@ -49,21 +49,34 @@ public final class WbsFilter {
     }
 
     public static List<WbsRow> visible(List<WbsItem> items, String person) {
-        return visible(items, person, "", false);
+        return visible(items, person, "", "", false);
     }
 
     public static List<WbsRow> visible(List<WbsItem> items, String person, String nameKeyword) {
-        return visible(items, person, nameKeyword, false);
+        return visible(items, person, "", nameKeyword, false);
     }
 
     public static List<WbsRow> visible(
             List<WbsItem> items, String person, String nameKeyword, boolean onlyWithActual) {
+        return visible(items, person, "", nameKeyword, onlyWithActual);
+    }
+
+    public static List<WbsRow> visible(
+            List<WbsItem> items,
+            String person,
+            String wbsNo,
+            String nameKeyword,
+            boolean onlyWithActual) {
+        String wantedWbs = Text.normalize(wbsNo);
         String keyword = Text.normalize(nameKeyword).toLowerCase(Locale.ROOT);
         boolean[] keep = new boolean[items.size()];
         boolean[] owned = new boolean[items.size()];
         for (int i = 0; i < items.size(); i++) {
             WbsItem item = items.get(i);
             if (!assignedTo(item.assignee(), person)) {
+                continue;
+            }
+            if (!wantedWbs.isEmpty() && !wbsEquals(item.wbsNo(), wantedWbs)) {
                 continue;
             }
             if (!keyword.isEmpty() && !nameContains(item.name(), keyword)) {
@@ -99,6 +112,14 @@ public final class WbsFilter {
             rows.add(new WbsRow(items.get(i), depth, owned[i]));
         }
         return rows;
+    }
+
+    public static boolean wbsEquals(String wbsNo, String wanted) {
+        String needle = Text.normalize(wanted);
+        if (needle.isEmpty()) {
+            return true;
+        }
+        return Text.normalize(wbsNo).equals(needle);
     }
 
     public static boolean nameContains(String name, String keyword) {

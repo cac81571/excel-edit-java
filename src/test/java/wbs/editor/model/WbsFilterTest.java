@@ -71,6 +71,36 @@ class WbsFilterTest {
         assertTrue(row(rows, "1.1.1").owned());
     }
 
+    @Test
+    void wbsNoExactMatchKeepsParents() {
+        List<WbsItem> items = sample();
+        WbsFilter.linkParents(items);
+        List<WbsRow> rows = WbsFilter.visible(items, "菅原", "1.1.2", "", false);
+
+        assertEquals(List.of("1", "1.1", "1.1.2"), wbsOf(rows));
+        assertFalse(row(rows, "1").owned());
+        assertFalse(row(rows, "1.1").owned());
+        assertTrue(row(rows, "1.1.2").owned());
+    }
+
+    @Test
+    void wbsNoExactMatchDoesNotHitChildren() {
+        List<WbsItem> items = sample();
+        WbsFilter.linkParents(items);
+        List<WbsRow> rows = WbsFilter.visible(items, "", "1.1", "", false);
+        assertEquals(List.of("1", "1.1"), wbsOf(rows));
+        assertTrue(row(rows, "1.1").owned());
+    }
+
+    @Test
+    void wbsAndNameFiltersAreCombined() {
+        List<WbsItem> items = sample();
+        WbsFilter.linkParents(items);
+        List<WbsRow> rows = WbsFilter.visible(items, "菅原", "1.1.1", "小項目", false);
+        assertEquals(List.of("1", "1.1", "1.1.1"), wbsOf(rows));
+        assertTrue(WbsFilter.visible(items, "菅原", "1.1.1", "存在しない", false).isEmpty());
+    }
+
     private static List<WbsItem> sample() {
         List<WbsItem> items = new ArrayList<>();
         items.add(item(1, "1", "大項目", ""));
