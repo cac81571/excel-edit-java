@@ -79,6 +79,13 @@ public final class MainFrame extends JFrame {
     private static final Color SHARED_FOREGROUND = new Color(0xB54708);
     private static final DateTimeFormatter FILE_TIME_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final int ROW_HEADER_WIDTH = 44;
+    private static final int LEVEL_COLUMN_WIDTH = 70;
+    private static final int WBS_COLUMN_WIDTH = 110;
+    /** Aligns 担当 / WBS No fields with the right edge of the table's WBS No column. */
+    private static final int KEY_FIELD_WIDTH = ROW_HEADER_WIDTH + LEVEL_COLUMN_WIDTH + WBS_COLUMN_WIDTH;
+    private static final int DATE_FIELD_WIDTH = 130;
+    private static final int NAME_FIELD_WIDTH = 280;
 
     private final AppSettings settings = AppSettings.load();
     private LayoutConfig layout = LayoutConfig.load(settings);
@@ -158,15 +165,16 @@ public final class MainFrame extends JFrame {
         fileField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "Excelファイルのパス");
         fileField.addActionListener(event -> openTypedFile());
         assigneeBox.setEditable(true);
-        assigneeBox.setPreferredSize(new Dimension(180, assigneeBox.getPreferredSize().height));
+        lockWidth(assigneeBox, KEY_FIELD_WIDTH);
         if (assigneeBox.getEditor().getEditorComponent() instanceof JTextField editor) {
             editor.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "空欄で全件");
             editor.getDocument().addDocumentListener(filterListener());
         }
         wbsFilterField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "完全一致");
-        wbsFilterField.setPreferredSize(new Dimension(180, wbsFilterField.getPreferredSize().height));
+        lockWidth(wbsFilterField, KEY_FIELD_WIDTH);
         wbsFilterField.getDocument().addDocumentListener(filterListener());
         nameFilterField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "項目名の一部");
+        lockWidth(nameFilterField, NAME_FIELD_WIDTH);
         nameFilterField.getDocument().addDocumentListener(filterListener());
         actualOnlyBox.addActionListener(event -> applyFilters());
 
@@ -182,39 +190,46 @@ public final class MainFrame extends JFrame {
         buttons.add(saveButton);
         buttons.add(settingsButton);
 
+        JPanel dateRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        dateRow.setOpaque(false);
+        dateRow.add(new JLabel("担当"));
+        dateRow.add(assigneeBox);
+        dateRow.add(new JLabel("日付"));
+        dateRow.add(dateSpinner);
+        dateRow.add(weekdayLabel);
+        dateRow.add(totalsLabel);
+        dateRow.add(buttons);
+
+        JPanel filterRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        filterRow.setOpaque(false);
+        filterRow.add(new JLabel("WBS No"));
+        filterRow.add(wbsFilterField);
+        filterRow.add(new JLabel("項目名"));
+        filterRow.add(nameFilterField);
+        filterRow.add(actualOnlyBox);
+
         JPanel form = new JPanel(new GridBagLayout());
         form.add(new JLabel("Excel"), constraints(0, 0, 0));
         GridBagConstraints fileConstraints = constraints(1, 0, 1);
-        fileConstraints.gridwidth = 3;
         fileConstraints.fill = GridBagConstraints.HORIZONTAL;
         form.add(fileField, fileConstraints);
-        form.add(browseButton, constraints(4, 0, 0));
-        form.add(loadButton, constraints(5, 0, 0));
-        form.add(new JLabel("担当"), constraints(0, 1, 0));
-        form.add(assigneeBox, constraints(1, 1, 0));
-        form.add(new JLabel("日付"), constraints(2, 1, 0));
-        form.add(dateSpinner, constraints(3, 1, 0));
-        JPanel dateExtras = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
-        dateExtras.setOpaque(false);
-        dateExtras.add(weekdayLabel);
-        dateExtras.add(totalsLabel);
-        form.add(dateExtras, constraints(4, 1, 1));
-        form.add(buttons, constraints(5, 1, 0));
-        form.add(new JLabel("WBS No"), constraints(0, 2, 0));
-        form.add(wbsFilterField, constraints(1, 2, 0));
-        form.add(new JLabel("項目名"), constraints(2, 2, 0));
-        GridBagConstraints nameConstraints = constraints(3, 2, 1);
-        nameConstraints.gridwidth = 2;
-        nameConstraints.fill = GridBagConstraints.HORIZONTAL;
-        form.add(nameFilterField, nameConstraints);
-        form.add(actualOnlyBox, constraints(5, 2, 0));
+        form.add(browseButton, constraints(2, 0, 0));
+        form.add(loadButton, constraints(3, 0, 0));
+        GridBagConstraints dateRowConstraints = constraints(0, 1, 1);
+        dateRowConstraints.gridwidth = 4;
+        dateRowConstraints.fill = GridBagConstraints.HORIZONTAL;
+        form.add(dateRow, dateRowConstraints);
+        GridBagConstraints filterRowConstraints = constraints(0, 2, 1);
+        filterRowConstraints.gridwidth = 4;
+        filterRowConstraints.fill = GridBagConstraints.HORIZONTAL;
+        form.add(filterRow, filterRowConstraints);
         JPanel summaryRow = new JPanel(new BorderLayout(12, 0));
         summaryRow.setOpaque(false);
         summaryRow.add(summaryLabel, BorderLayout.WEST);
         selectionLabel.setHorizontalAlignment(SwingConstants.RIGHT);
         summaryRow.add(selectionLabel, BorderLayout.EAST);
         GridBagConstraints summaryConstraints = constraints(0, 3, 1);
-        summaryConstraints.gridwidth = 6;
+        summaryConstraints.gridwidth = 4;
         summaryConstraints.fill = GridBagConstraints.HORIZONTAL;
         form.add(summaryRow, summaryConstraints);
 
@@ -376,8 +391,8 @@ public final class MainFrame extends JFrame {
         created.getColumnModel().getColumn(5).setCellRenderer(number);
         created.getColumnModel().getColumn(4).setCellEditor(new HoursEditor());
         created.getColumnModel().getColumn(5).setCellEditor(new HoursEditor());
-        created.getColumnModel().getColumn(0).setPreferredWidth(70);
-        created.getColumnModel().getColumn(1).setPreferredWidth(110);
+        created.getColumnModel().getColumn(0).setPreferredWidth(LEVEL_COLUMN_WIDTH);
+        created.getColumnModel().getColumn(1).setPreferredWidth(WBS_COLUMN_WIDTH);
         created.getColumnModel().getColumn(2).setPreferredWidth(360);
         created.getColumnModel().getColumn(3).setPreferredWidth(120);
         created.getColumnModel().getColumn(4).setPreferredWidth(90);
@@ -481,7 +496,7 @@ public final class MainFrame extends JFrame {
             currentDate = typed;
             weekdayLabel.setText("（" + JapaneseDates.weekday(currentDate) + "）");
             workbook.loadDay(currentDate);
-            refreshTable(false);
+            refreshTable(true);
             return true;
         }
         if (!workbook.isDirty()) {
@@ -615,7 +630,7 @@ public final class MainFrame extends JFrame {
         notice = "";
         if (workbook != null) {
             workbook.loadDay(currentDate);
-            refreshTable(false);
+            refreshTable(true);
         } else {
             updateStatus();
         }
@@ -642,7 +657,7 @@ public final class MainFrame extends JFrame {
     }
 
     private void configureRowHeader() {
-        rowHeader.setFixedCellWidth(44);
+        rowHeader.setFixedCellWidth(ROW_HEADER_WIDTH);
         rowHeader.setFixedCellHeight(table.getRowHeight());
         rowHeader.setBackground(new Color(0xF3F4F6));
         rowHeader.setForeground(HINT_FOREGROUND);
@@ -922,8 +937,7 @@ public final class MainFrame extends JFrame {
     private static JSpinner createDateSpinner(LocalDate date) {
         JSpinner spinner = new JSpinner(new DaySpinnerModel(date));
         spinner.setEditor(new DaySpinnerEditor(spinner));
-        Dimension size = spinner.getPreferredSize();
-        spinner.setPreferredSize(new Dimension(130, size.height));
+        lockWidth(spinner, DATE_FIELD_WIDTH);
         spinner.setToolTipText("YYYYMMDD で直接入力できます（例: 20261006）");
         return spinner;
     }
@@ -1033,6 +1047,13 @@ public final class MainFrame extends JFrame {
         public String valueToString(Object value) {
             return value == null ? "" : JapaneseDates.formatBasic((LocalDate) value);
         }
+    }
+
+    private static void lockWidth(JComponent component, int width) {
+        Dimension size = new Dimension(width, component.getPreferredSize().height);
+        component.setPreferredSize(size);
+        component.setMinimumSize(size);
+        component.setMaximumSize(size);
     }
 
     private static GridBagConstraints constraints(int x, int y, double weight) {
