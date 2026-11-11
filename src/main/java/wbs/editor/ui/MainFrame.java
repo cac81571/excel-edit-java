@@ -79,13 +79,14 @@ public final class MainFrame extends JFrame {
     private static final Color SHARED_FOREGROUND = new Color(0xB54708);
     private static final DateTimeFormatter FILE_TIME_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-    private static final int ROW_HEADER_WIDTH = 44;
+    private static final int ROW_HEADER_WIDTH = 56;
     private static final int LEVEL_COLUMN_WIDTH = 70;
     private static final int WBS_COLUMN_WIDTH = 110;
     /** Aligns 担当 / WBS No fields with the right edge of the table's WBS No column. */
     private static final int KEY_FIELD_WIDTH = ROW_HEADER_WIDTH + LEVEL_COLUMN_WIDTH + WBS_COLUMN_WIDTH;
     private static final int DATE_FIELD_WIDTH = 130;
     private static final int NAME_FIELD_WIDTH = 280;
+    private static final String ALL_ASSIGNEES = "（全て）";
 
     private final AppSettings settings = AppSettings.load();
     private LayoutConfig layout = LayoutConfig.load(settings);
@@ -100,7 +101,6 @@ public final class MainFrame extends JFrame {
     private final JLabel weekdayLabel = new JLabel();
     private final JLabel totalsLabel = new JLabel(" ");
     private final JLabel summaryLabel = new JLabel(" ");
-    private final JLabel selectionLabel = new JLabel(" ");
     private final JLabel layoutLabel = new JLabel(" ");
     private final JLabel fileInfoLabel = new JLabel(" ");
     private final JList<String> rowHeader = new JList<>();
@@ -113,6 +113,7 @@ public final class MainFrame extends JFrame {
     private boolean adjusting;
     private boolean suppressDateEvents;
     private String notice = "";
+    private String[] rowHeaderLabels = new String[0];
 
     public MainFrame(Path initialFile) {
         super("WBS実績入力");
@@ -167,7 +168,7 @@ public final class MainFrame extends JFrame {
         assigneeBox.setEditable(true);
         lockWidth(assigneeBox, KEY_FIELD_WIDTH);
         if (assigneeBox.getEditor().getEditorComponent() instanceof JTextField editor) {
-            editor.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "空欄で全件");
+            editor.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "（全て）または担当者名");
             editor.getDocument().addDocumentListener(filterListener());
         }
         wbsFilterField.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, "完全一致");
@@ -226,8 +227,6 @@ public final class MainFrame extends JFrame {
         JPanel summaryRow = new JPanel(new BorderLayout(12, 0));
         summaryRow.setOpaque(false);
         summaryRow.add(summaryLabel, BorderLayout.WEST);
-        selectionLabel.setHorizontalAlignment(SwingConstants.RIGHT);
-        summaryRow.add(selectionLabel, BorderLayout.EAST);
         GridBagConstraints summaryConstraints = constraints(0, 3, 1);
         summaryConstraints.gridwidth = 4;
         summaryConstraints.fill = GridBagConstraints.HORIZONTAL;
@@ -297,38 +296,44 @@ public final class MainFrame extends JFrame {
             }
         });
         table.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0), "clearHours");
-        AbstractAction copyCells = new AbstractAction() {
+        AbstractAction copyAddresses = new AbstractAction() {
             @Override
             public void actionPerformed(java.awt.event.ActionEvent event) {
-                copySelectedCells();
+                copySelectedCellAddresses();
             }
         };
-        table.getActionMap().put("copy", copyCells);
+        table.getActionMap().put("copy", copyAddresses);
         table.getInputMap(JComponent.WHEN_FOCUSED).put(
                 KeyStroke.getKeyStroke(KeyEvent.VK_C, Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()),
                 "copy");
     }
 
-    private void copySelectedCells() {
+    private void copySelectedCellAddresses() {
         int[] rows = table.getSelectedRows();
-        int[] columns = table.getSelectedColumns();
-        if (rows.length == 0 || columns.length == 0) {
+        if (rows.length == 0) {
             return;
         }
         StringBuilder text = new StringBuilder();
-        for (int r = 0; r < rows.length; r++) {
-            if (r > 0) {
+        int copied = 0;
+        for (int viewRow : rows) {
+            String address = viewRow >= 0 && viewRow < rowHeaderLabels.length ? rowHeaderLabels[viewRow] : "";
+            if (address.isBlank()) {
+                continue;
+            }
+            if (copied > 0) {
                 text.append('\n');
             }
-            for (int c = 0; c < columns.length; c++) {
-                if (c > 0) {
-                    text.append('\t');
-                }
-                Object value = table.getValueAt(rows[r], columns[c]);
-                text.append(value == null ? "" : value.toString());
-            }
+            text.append(address);
+            copied++;
+        }
+        if (copied == 0) {
+            return;
         }
         Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text.toString()), null);
+        notice = copied == 1
+                ? "セル番号「" + text + "」をコピーしました。"
+                : "セル番号を " + copied + " 件コピーしました。";
+        updateStatus();
     }
 
     private JTable createTable() {
@@ -465,15 +470,21 @@ public final class MainFrame extends JFrame {
                 settings.put("lastDir", currentFile.getParent().toString());
             }
             persistSettings();
-            String selected = assigneeText();
+            String selected = assigneeFilterText();
             if (selected.isBlank()) {
                 selected = settings.get("lastAssignee", "");
+            }
+            if (selected.isBlank() || ALL_ASSIGNEES.equals(selected)) {
+                selected = ALL_ASSIGNEES;
             }
             adjusting = true;
             try {
                 assigneeBox.removeAllItems();
+                assigneeBox.addItem(ALL_ASSIGNEES);
                 for (String name : opened.assignees()) {
-                    assigneeBox.addItem(name);
+                    if (!ALL_ASSIGNEES.equals(name)) {
+                        assigneeBox.addItem(name);
+                    }
                 }
                 assigneeBox.setSelectedItem(selected);
                 if (assigneeBox.getEditor().getEditorComponent() instanceof JTextField editor) {
@@ -535,7 +546,7 @@ public final class MainFrame extends JFrame {
             try {
                 var backup = workbook.save(currentFile);
                 workbook.markClean();
-                settings.put("lastAssignee", assigneeText());
+                settings.put("lastAssignee", assigneeSettingValue());
                 persistSettings();
                 notice = "保存しました。";
                 updateStatus();
@@ -648,7 +659,7 @@ public final class MainFrame extends JFrame {
 
     private void refreshTable(boolean structureChanged) {
         if (structureChanged) {
-            String person = assigneeText();
+            String person = assigneeFilterText();
             String wbsNo = wbsFilterField.getText();
             String nameKeyword = nameFilterField.getText();
             model.setRows(workbook == null
@@ -683,27 +694,31 @@ public final class MainFrame extends JFrame {
     private void refreshRowHeader() {
         int count = table.getRowCount();
         String[] labels = new String[count];
+        OptionalInt dateColumn = workbook == null ? OptionalInt.empty() : workbook.columnOf(currentDate);
+        int columnIndex = dateColumn.orElse(layout.firstDateColumn);
+        String columnName = Columns.name(columnIndex);
         for (int viewRow = 0; viewRow < count; viewRow++) {
             WbsItem item = model.row(table.convertRowIndexToModel(viewRow)).item();
-            int excelRow = item.planRow() >= 0 ? item.planRow() + 1
-                    : item.actualRow() >= 0 ? item.actualRow() + 1 : -1;
-            labels[viewRow] = excelRow > 0 ? Integer.toString(excelRow) : "";
+            int excelRow = item.actualRow() >= 0 ? item.actualRow() + 1
+                    : item.planRow() >= 0 ? item.planRow() + 1 : -1;
+            labels[viewRow] = excelRow > 0 ? columnName + excelRow : "";
         }
+        rowHeaderLabels = labels;
         rowHeader.setListData(labels);
         rowHeader.setFixedCellHeight(table.getRowHeight());
+        rowHeader.setToolTipText("選択行のセル番号は Ctrl+C でコピーできます");
     }
 
     private void updateStatus() {
         List<WbsRow> rows = model.rows();
         String message;
         String totals = " ";
-        String selection = " ";
         if (workbook == null) {
             message = "Excelファイルを開いてください。";
         } else if (workbook.items().isEmpty()) {
             message = "WBSを読み取れませんでした。配置設定のデータ開始行と列を確認してください。";
         } else if (rows.isEmpty()) {
-            String assignee = assigneeText().trim();
+            String assignee = assigneeFilterText();
             String wbsNo = wbsFilterField.getText().trim();
             String nameKeyword = nameFilterField.getText().trim();
             boolean actualOnly = actualOnlyBox.isSelected();
@@ -740,7 +755,6 @@ public final class MainFrame extends JFrame {
             SummaryParts parts = summary(rows);
             message = parts.message();
             totals = parts.totals();
-            selection = parts.selection();
         }
         if (!notice.isEmpty()) {
             message = notice + "  " + message;
@@ -749,8 +763,6 @@ public final class MainFrame extends JFrame {
         summaryLabel.setToolTipText(message);
         totalsLabel.setText(totals);
         totalsLabel.setToolTipText(totals.trim().isEmpty() ? null : totals);
-        selectionLabel.setText(selection);
-        selectionLabel.setToolTipText(selection.trim().isEmpty() ? null : selection);
         String resolved = workbook == null
                 ? (layout.sheetName == null || layout.sheetName.isBlank() ? "先頭のシート" : layout.sheetName)
                 : workbook.sheetName();
@@ -814,35 +826,10 @@ public final class MainFrame extends JFrame {
             message.append("    実績行がない項目が ").append(missingActual).append(" 件あります。");
         }
         String totals = "予定合計 " + Hours.format(plan) + "   実績合計 " + Hours.format(actual);
-        return new SummaryParts(message.toString(), totals, selectionText(rows));
+        return new SummaryParts(message.toString(), totals);
     }
 
-    private String selectionText(List<WbsRow> rows) {
-        int selected = table.getSelectedRow();
-        if (selected < 0) {
-            return " ";
-        }
-        int modelRow = table.convertRowIndexToModel(selected);
-        if (modelRow < 0 || modelRow >= rows.size()) {
-            return " ";
-        }
-        WbsItem item = rows.get(modelRow).item();
-        OptionalInt column = workbook.columnOf(currentDate);
-        String name = item.name().isBlank() ? item.wbsNo() : item.name();
-        return name + "  予定 " + address(item.planRow(), column)
-                + "  実績 " + address(item.actualRow(), column);
-    }
-
-    private record SummaryParts(String message, String totals, String selection) {
-    }
-
-    private String address(int row, OptionalInt column) {
-        if (row < 0) {
-            return "—";
-        }
-        int resolved = column.isPresent() ? column.getAsInt() : layout.firstDateColumn;
-        String text = Columns.name(resolved) + (row + 1);
-        return column.isEmpty() ? text + "（新規）" : text;
+    private record SummaryParts(String message, String totals) {
     }
 
     private boolean confirmSaveIfDirty(String lead) {
@@ -880,7 +867,7 @@ public final class MainFrame extends JFrame {
         if (!confirmSaveIfDirty("終了します。")) {
             return;
         }
-        settings.put("lastAssignee", assigneeText());
+        settings.put("lastAssignee", assigneeSettingValue());
         persistSettings();
         dispose();
         if (workbook != null) {
@@ -933,6 +920,17 @@ public final class MainFrame extends JFrame {
         }
         Object value = assigneeBox.getSelectedItem();
         return value == null ? "" : value.toString().trim();
+    }
+
+    /** Filter value: blank means show all (including when（全て）is selected). */
+    private String assigneeFilterText() {
+        String text = assigneeText();
+        return ALL_ASSIGNEES.equals(text) ? "" : text;
+    }
+
+    /** Value stored in settings;（全て）is saved as blank. */
+    private String assigneeSettingValue() {
+        return assigneeFilterText();
     }
 
     private void error(String message) {
