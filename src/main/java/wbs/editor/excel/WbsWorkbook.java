@@ -32,6 +32,8 @@ import org.apache.poi.ooxml.POIXMLDocumentPart;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import wbs.editor.model.AppSettings;
 import wbs.editor.model.Hours;
+import wbs.editor.model.HoursHistoryEntry;
+import wbs.editor.model.JapaneseDates;
 import wbs.editor.model.LayoutConfig;
 import wbs.editor.model.Text;
 import wbs.editor.model.WbsFilter;
@@ -167,6 +169,57 @@ public final class WbsWorkbook implements AutoCloseable {
                     : null;
             item.load(plan, actual);
             item.setTotalHours(readTotalHours(item));
+        }
+    }
+
+    /**
+     * Days where plan or actual is entered for {@code item}.
+     * Values for {@code selectedDate} come from the in-memory item (including unsaved edits).
+     */
+    public List<HoursHistoryEntry> hoursHistory(WbsItem item, LocalDate selectedDate) {
+        List<HoursHistoryEntry> entries = new ArrayList<>();
+        if (item == null) {
+            return entries;
+        }
+        int year = selectedDate.getYear();
+        int previousMonth = 0;
+        for (DateColumn column : dateColumns) {
+            LocalDate date = resolveHistoryDate(column, year, previousMonth);
+            if (date == null) {
+                continue;
+            }
+            year = date.getYear();
+            previousMonth = date.getMonthValue();
+            Double plan;
+            Double actual;
+            if (column.matches(selectedDate)) {
+                plan = item.plan();
+                actual = item.actual();
+            } else {
+                plan = item.planRow() >= 0 ? readNumber(item.planRow(), column.column) : null;
+                actual = item.actualRow() >= 0 ? readNumber(item.actualRow(), column.column) : null;
+            }
+            if (plan == null && actual == null) {
+                continue;
+            }
+            String label = date.getMonthValue() + "月" + date.getDayOfMonth() + "日";
+            entries.add(new HoursHistoryEntry(date, label, JapaneseDates.weekday(date), plan, actual));
+        }
+        return entries;
+    }
+
+    private static LocalDate resolveHistoryDate(DateColumn column, int year, int previousMonth) {
+        if (column.exact != null) {
+            return column.exact;
+        }
+        int resolvedYear = year;
+        if (previousMonth > 0 && column.month < previousMonth) {
+            resolvedYear++;
+        }
+        try {
+            return LocalDate.of(resolvedYear, column.month, column.day);
+        } catch (DateTimeException ex) {
+            return null;
         }
     }
 

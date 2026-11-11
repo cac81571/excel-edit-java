@@ -64,6 +64,30 @@ class WbsWorkbookTest {
     }
 
     @Test
+    void hoursHistoryShowsOnlyDaysWithPlanOrActual() throws Exception {
+        Path file = sampleLikeScreenshot(temp.resolve("history.xlsx"));
+        LocalDate october4 = LocalDate.of(2026, 10, 4);
+        try (WbsWorkbook book = WbsWorkbook.open(file, new LayoutConfig())) {
+            book.loadDay(october4);
+            WbsItem item = find(book, "1.1.1");
+            var history = book.hoursHistory(item, october4);
+            assertEquals(1, history.size());
+            assertEquals("10月4日", history.get(0).dateLabel());
+            assertEquals("日", history.get(0).weekday());
+            assertEquals(2.5, history.get(0).actual(), 0.001);
+            assertNull(history.get(0).plan());
+
+            item.setPlan(1.0);
+            history = book.hoursHistory(item, october4);
+            assertEquals(1, history.size());
+            assertEquals(1.0, history.get(0).plan(), 0.001);
+            assertEquals(2.5, history.get(0).actual(), 0.001);
+
+            assertTrue(book.hoursHistory(find(book, "1"), october4).isEmpty());
+        }
+    }
+
+    @Test
     void treatsNumericZeroAssigneeAsBlank() throws Exception {
         Path file = temp.resolve("zero-assignee.xlsx");
         try (XSSFWorkbook workbook = new XSSFWorkbook()) {

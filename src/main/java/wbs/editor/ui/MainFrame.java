@@ -104,6 +104,7 @@ public final class MainFrame extends JFrame {
     private final JLabel layoutLabel = new JLabel(" ");
     private final JLabel fileInfoLabel = new JLabel(" ");
     private final JList<String> rowHeader = new JList<>();
+    private final HoursHistoryPanel historyPanel = new HoursHistoryPanel();
     private final JButton loadButton = new JButton("読み込み");
     private final JButton saveButton = new JButton("保存");
 
@@ -241,6 +242,10 @@ public final class MainFrame extends JFrame {
 
         JScrollPane scroll = new JScrollPane(table);
         scroll.setRowHeaderView(rowHeader);
+        JPanel center = new JPanel(new BorderLayout(0, 0));
+        center.setOpaque(false);
+        center.add(scroll, BorderLayout.CENTER);
+        center.add(historyPanel, BorderLayout.EAST);
         JPanel south = new JPanel(new BorderLayout(12, 0));
         south.setOpaque(false);
         south.add(layoutLabel, BorderLayout.CENTER);
@@ -248,7 +253,7 @@ public final class MainFrame extends JFrame {
         JPanel root = new JPanel(new BorderLayout(0, 8));
         root.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
         root.add(form, BorderLayout.NORTH);
-        root.add(scroll, BorderLayout.CENTER);
+        root.add(center, BorderLayout.CENTER);
         root.add(south, BorderLayout.SOUTH);
         setContentPane(root);
 
@@ -275,10 +280,17 @@ public final class MainFrame extends JFrame {
                 notice = "";
             }
             updateStatus();
+            if (event.getType() == TableModelEvent.UPDATE
+                    && (event.getColumn() == WbsTableModel.COL_PLAN
+                            || event.getColumn() == WbsTableModel.COL_ACTUAL
+                            || event.getColumn() < 0)) {
+                refreshHoursHistory();
+            }
         });
         table.getSelectionModel().addListSelectionListener(event -> {
             if (!event.getValueIsAdjusting()) {
                 updateStatus();
+                refreshHoursHistory();
             }
         });
         table.getActionMap().put("clearHours", new AbstractAction() {
@@ -707,6 +719,27 @@ public final class MainFrame extends JFrame {
         rowHeader.setListData(labels);
         rowHeader.setFixedCellHeight(table.getRowHeight());
         rowHeader.setToolTipText("選択行のセル番号は Ctrl+C でコピーできます");
+        refreshHoursHistory();
+    }
+
+    private void refreshHoursHistory() {
+        if (workbook == null) {
+            historyPanel.clear();
+            return;
+        }
+        int selected = table.getSelectedRow();
+        if (selected < 0) {
+            historyPanel.clear();
+            return;
+        }
+        int modelRow = table.convertRowIndexToModel(selected);
+        if (modelRow < 0 || modelRow >= model.getRowCount()) {
+            historyPanel.clear();
+            return;
+        }
+        WbsItem item = model.row(modelRow).item();
+        String name = item.name().isBlank() ? item.wbsNo() : item.name();
+        historyPanel.showHistory(name, workbook.hoursHistory(item, currentDate));
     }
 
     private void updateStatus() {
