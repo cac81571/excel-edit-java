@@ -287,7 +287,10 @@ public final class MainFrame extends JFrame {
             public void actionPerformed(java.awt.event.ActionEvent event) {
                 int row = table.getSelectedRow();
                 int column = table.getSelectedColumn();
-                if (row < 0 || column < 4 || table.isEditing() || !table.isCellEditable(row, column)) {
+                if (row < 0
+                        || column < WbsTableModel.COL_PLAN
+                        || table.isEditing()
+                        || !table.isCellEditable(row, column)) {
                     return;
                 }
                 table.setValueAt("", row, column);
@@ -339,7 +342,7 @@ public final class MainFrame extends JFrame {
                     if (!item.owned()) {
                         component.setBackground(PARENT_BACKGROUND);
                         component.setForeground(PARENT_FOREGROUND);
-                    } else if (column >= 4) {
+                    } else if (column >= WbsTableModel.COL_PLAN) {
                         component.setBackground(INPUT_BACKGROUND);
                         component.setForeground(getForeground());
                     } else {
@@ -348,12 +351,14 @@ public final class MainFrame extends JFrame {
                     }
                 }
                 if (component instanceof JComponent label) {
-                    int left = column == 2 ? 8 + item.depth() * 18 : 6;
+                    int left = column == WbsTableModel.COL_NAME ? 8 + item.depth() * 18 : 6;
                     label.setBorder(BorderFactory.createEmptyBorder(0, left, 0, 6));
                     if (!item.owned()) {
                         label.setToolTipText("親WBSです。表示のみで、この画面では入力しません。");
-                    } else if (column >= 4) {
+                    } else if (column >= WbsTableModel.COL_PLAN) {
                         label.setToolTipText("時間を入力します。空欄にするとクリアできます。");
+                    } else if (column == WbsTableModel.COL_TOTAL_HOURS) {
+                        label.setToolTipText("Excelの工数合計列の値です（表示のみ）。");
                     } else {
                         label.setToolTipText(null);
                     }
@@ -372,8 +377,11 @@ public final class MainFrame extends JFrame {
                 if (!item.owned()) {
                     return "親WBSです。表示のみで、この画面では入力しません。";
                 }
-                if (column >= 4) {
+                if (column >= WbsTableModel.COL_PLAN) {
                     return "時間を入力します。空欄にするとクリアできます。";
+                }
+                if (column == WbsTableModel.COL_TOTAL_HOURS) {
+                    return "Excelの工数合計列の値です（表示のみ）。";
                 }
                 return null;
             }
@@ -387,16 +395,18 @@ public final class MainFrame extends JFrame {
         created.setAutoResizeMode(JTable.AUTO_RESIZE_SUBSEQUENT_COLUMNS);
         DefaultTableCellRenderer number = new DefaultTableCellRenderer();
         number.setHorizontalAlignment(JLabel.RIGHT);
-        created.getColumnModel().getColumn(4).setCellRenderer(number);
-        created.getColumnModel().getColumn(5).setCellRenderer(number);
-        created.getColumnModel().getColumn(4).setCellEditor(new HoursEditor());
-        created.getColumnModel().getColumn(5).setCellEditor(new HoursEditor());
-        created.getColumnModel().getColumn(0).setPreferredWidth(LEVEL_COLUMN_WIDTH);
-        created.getColumnModel().getColumn(1).setPreferredWidth(WBS_COLUMN_WIDTH);
-        created.getColumnModel().getColumn(2).setPreferredWidth(360);
-        created.getColumnModel().getColumn(3).setPreferredWidth(120);
-        created.getColumnModel().getColumn(4).setPreferredWidth(90);
-        created.getColumnModel().getColumn(5).setPreferredWidth(90);
+        created.getColumnModel().getColumn(WbsTableModel.COL_TOTAL_HOURS).setCellRenderer(number);
+        created.getColumnModel().getColumn(WbsTableModel.COL_PLAN).setCellRenderer(number);
+        created.getColumnModel().getColumn(WbsTableModel.COL_ACTUAL).setCellRenderer(number);
+        created.getColumnModel().getColumn(WbsTableModel.COL_PLAN).setCellEditor(new HoursEditor());
+        created.getColumnModel().getColumn(WbsTableModel.COL_ACTUAL).setCellEditor(new HoursEditor());
+        created.getColumnModel().getColumn(WbsTableModel.COL_LEVEL).setPreferredWidth(LEVEL_COLUMN_WIDTH);
+        created.getColumnModel().getColumn(WbsTableModel.COL_WBS).setPreferredWidth(WBS_COLUMN_WIDTH);
+        created.getColumnModel().getColumn(WbsTableModel.COL_NAME).setPreferredWidth(360);
+        created.getColumnModel().getColumn(WbsTableModel.COL_ASSIGNEE).setPreferredWidth(120);
+        created.getColumnModel().getColumn(WbsTableModel.COL_TOTAL_HOURS).setPreferredWidth(90);
+        created.getColumnModel().getColumn(WbsTableModel.COL_PLAN).setPreferredWidth(90);
+        created.getColumnModel().getColumn(WbsTableModel.COL_ACTUAL).setPreferredWidth(90);
         return created;
     }
 

@@ -10,6 +10,7 @@ public final class WbsItem {
     private int parentIndex = -1;
     private Double plan;
     private Double actual;
+    private Double totalHours;
     private Double loadedPlan;
     private Double loadedActual;
 
@@ -68,6 +69,14 @@ public final class WbsItem {
 
     public void setActual(Double actual) {
         this.actual = actual;
+    }
+
+    public Double totalHours() {
+        return totalHours;
+    }
+
+    public void setTotalHours(Double totalHours) {
+        this.totalHours = totalHours;
     }
 
     public Double loadedPlan() {

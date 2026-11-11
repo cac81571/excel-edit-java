@@ -34,6 +34,7 @@ final class SettingsDialog extends JDialog {
     private final JTextField wbsField = columnField();
     private final JTextField nameField = columnField();
     private final JTextField assigneeField = columnField();
+    private final JTextField totalHoursField = columnField();
     private final JTextField kindField = columnField();
     private final JTextField dateColumnField = columnField();
     private final JTextField planLabelField = new JTextField(8);
@@ -58,7 +59,7 @@ final class SettingsDialog extends JDialog {
         JLabel explain = new JLabel("<html><body style='width:520px'>"
                 + "シート名と、各項目の行・列を指定します。行は 1 から、列は A や F、または 1 からの番号です。"
                 + "初期値は、日付が 2 行目、曜日が 3 行目、データが 4 行目、"
-                + "Level が A、WBS No が B、項目名が C、担当が D、予定／実績が E、日付が F 列からです。"
+                + "Level が A、WBS No が B、項目名が C、担当が D、工数合計が E、予定／実績が F、日付が G 列からです。"
                 + "<br>各WBSは「予定」の行と、その次の「実績」の行を 1 件として読み書きします。"
                 + "</body></html>");
 
@@ -72,6 +73,7 @@ final class SettingsDialog extends JDialog {
         row = add(form, row, "WBS No", wbsField, null);
         row = add(form, row, "項目名", nameField, null);
         row = add(form, row, "担当", assigneeField, null);
+        row = add(form, row, "工数合計", totalHoursField, "表示のみ");
         row = add(form, row, "予定／実績", kindField, "予定・実績と書いている列");
         row = add(form, row, "日付の開始列", dateColumnField, "この列から右へ日付が並びます");
         row = add(form, row, "予定と書く文字", planLabelField, null);
@@ -110,6 +112,7 @@ final class SettingsDialog extends JDialog {
         listen(wbsField);
         listen(nameField);
         listen(assigneeField);
+        listen(totalHoursField);
         listen(kindField);
         listen(dateColumnField);
         listen(planLabelField);
@@ -157,6 +160,7 @@ final class SettingsDialog extends JDialog {
         wbsField.setText(Columns.name(config.wbsColumn));
         nameField.setText(Columns.name(config.nameColumn));
         assigneeField.setText(Columns.name(config.assigneeColumn));
+        totalHoursField.setText(Columns.name(config.totalHoursColumn));
         kindField.setText(Columns.name(config.kindColumn));
         dateColumnField.setText(Columns.name(config.firstDateColumn));
         planLabelField.setText(config.planLabel);
@@ -204,6 +208,7 @@ final class SettingsDialog extends JDialog {
         config.wbsColumn = Columns.parse(wbsField.getText());
         config.nameColumn = Columns.parse(nameField.getText());
         config.assigneeColumn = Columns.parse(assigneeField.getText());
+        config.totalHoursColumn = Columns.parse(totalHoursField.getText());
         config.kindColumn = Columns.parse(kindField.getText());
         config.firstDateColumn = Columns.parse(dateColumnField.getText());
         config.planLabel = planLabelField.getText().trim();

@@ -166,6 +166,7 @@ public final class WbsWorkbook implements AutoCloseable {
                     ? readNumber(item.actualRow(), column.getAsInt())
                     : null;
             item.load(plan, actual);
+            item.setTotalHours(readTotalHours(item));
         }
     }
 
@@ -403,9 +404,27 @@ public final class WbsWorkbook implements AutoCloseable {
                 assignee = readAssignee(other);
             }
             int level = parseLevel(readText(identityRow, layout.levelColumn), wbs);
-            loaded.add(new WbsItem(level, wbs, name, assignee, planRow, actualRow));
+            WbsItem item = new WbsItem(level, wbs, name, assignee, planRow, actualRow);
+            item.setTotalHours(readTotalHours(item));
+            loaded.add(item);
         }
         return loaded;
+    }
+
+    private Double readTotalHours(WbsItem item) {
+        if (layout.totalHoursColumn < 0) {
+            return null;
+        }
+        int primary = item.planRow() >= 0 ? item.planRow() : item.actualRow();
+        if (primary < 0) {
+            return null;
+        }
+        Double value = readNumber(primary, layout.totalHoursColumn);
+        if (value == null && item.planRow() >= 0 && item.actualRow() >= 0) {
+            int other = primary == item.planRow() ? item.actualRow() : item.planRow();
+            value = readNumber(other, layout.totalHoursColumn);
+        }
+        return value;
     }
 
     private boolean isCompanion(int current, int next) {

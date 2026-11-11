@@ -50,7 +50,9 @@ class WbsWorkbookTest {
             assertTrue(row(rows, "3").owned());
             assertFalse(row(rows, "A").owned());
             assertEquals(2.5, row(rows, "1.1.1").item().actual(), 0.001);
+            assertEquals(2.5, row(rows, "1.1.1").item().totalHours(), 0.001);
             assertEquals(1.5, row(rows, "1.1.2").item().actual(), 0.001);
+            assertEquals(1.5, row(rows, "1.1.2").item().totalHours(), 0.001);
             assertEquals("1", book.items().get(find(book, "1.10").parentIndex()).wbsNo());
             assertEquals("1.1", book.items().get(find(book, "1.1.1").parentIndex()).wbsNo());
             assertEquals("A", book.items().get(find(book, "B").parentIndex()).wbsNo());
@@ -67,7 +69,7 @@ class WbsWorkbookTest {
         try (XSSFWorkbook workbook = new XSSFWorkbook()) {
             Sheet sheet = workbook.createSheet("WBS");
             Row dates = sheet.createRow(1);
-            dates.createCell(5).setCellValue("10月4日");
+            dates.createCell(6).setCellValue("10月4日");
             sheet.createRow(2);
             int row = 3;
             row = pair(sheet, row, 1, "1", "大項目", "", null);
@@ -76,8 +78,8 @@ class WbsWorkbookTest {
             plan.createCell(1).setCellValue("1.1");
             plan.createCell(2).setCellValue("ゼロ担当");
             plan.createCell(3).setCellValue(0);
-            plan.createCell(4).setCellValue("予定");
-            sheet.createRow(row + 1).createCell(4).setCellValue("実績");
+            plan.createCell(5).setCellValue("予定");
+            sheet.createRow(row + 1).createCell(5).setCellValue("実績");
             try (OutputStream out = Files.newOutputStream(file)) {
                 workbook.write(out);
             }
@@ -240,7 +242,7 @@ class WbsWorkbookTest {
         }
         try (XSSFWorkbook workbook = new XSSFWorkbook(Files.newInputStream(file))) {
             Sheet sheet = workbook.getSheetAt(0);
-            Cell zero = sheet.getRow(10).getCell(8);
+            Cell zero = sheet.getRow(10).getCell(9);
             assertEquals("0.00", zero.getCellStyle().getDataFormatString());
             assertNull(workbook.getCalculationChain());
         }
@@ -276,6 +278,7 @@ class WbsWorkbookTest {
         config.wbsColumn = 3;
         config.nameColumn = 4;
         config.assigneeColumn = 5;
+        config.totalHoursColumn = 8;
         config.kindColumn = 6;
         config.firstDateColumn = 7;
 
@@ -295,16 +298,16 @@ class WbsWorkbookTest {
         Path file = temp.resolve("label.xlsx");
         try (XSSFWorkbook workbook = new XSSFWorkbook()) {
             Sheet sheet = workbook.createSheet();
-            sheet.createRow(1).createCell(5).setCellValue("10月1日");
+            sheet.createRow(1).createCell(6).setCellValue("10月1日");
             Row plan = sheet.createRow(3);
             plan.createCell(0).setCellValue(1);
             plan.createCell(1).setCellValue("1");
             plan.createCell(2).setCellValue("作業");
             plan.createCell(3).setCellValue("菅原");
-            plan.createCell(4).setCellValue("計画");
+            plan.createCell(5).setCellValue("計画");
             Row actual = sheet.createRow(4);
-            actual.createCell(4).setCellValue("実績");
-            actual.createCell(5).setCellValue(4);
+            actual.createCell(5).setCellValue("実績");
+            actual.createCell(6).setCellValue(4);
             try (OutputStream out = Files.newOutputStream(file)) {
                 workbook.write(out);
             }
@@ -330,21 +333,21 @@ class WbsWorkbookTest {
             Sheet sheet = workbook.createSheet("WBS");
             Row dates = sheet.createRow(1);
             Row weeks = sheet.createRow(2);
-            dates.createCell(5).setCellValue("10月1日");
-            weeks.createCell(5).setCellValue("木");
+            dates.createCell(6).setCellValue("10月1日");
+            weeks.createCell(6).setCellValue("木");
             // Plain serial without date format — POI does not treat this as isCellDateFormatted.
-            dates.createCell(6).setCellValue(DateUtil.getExcelDate(java.sql.Date.valueOf(start)));
-            weeks.createCell(6).setCellFormula("TEXT(G2,\"aaa\")");
+            dates.createCell(7).setCellValue(DateUtil.getExcelDate(java.sql.Date.valueOf(start)));
+            weeks.createCell(7).setCellFormula("TEXT(H2,\"aaa\")");
             for (int i = 1; i < 7; i++) {
-                char prev = (char) ('G' + i - 1);
-                char col = (char) ('G' + i);
-                dates.createCell(6 + i).setCellFormula(prev + "2+1");
-                weeks.createCell(6 + i).setCellFormula("TEXT(" + col + "2,\"aaa\")");
+                char prev = (char) ('H' + i - 1);
+                char col = (char) ('H' + i);
+                dates.createCell(7 + i).setCellFormula(prev + "2+1");
+                weeks.createCell(7 + i).setCellFormula("TEXT(" + col + "2,\"aaa\")");
             }
             int row = pair(sheet, 3, 1, "1", "大項目", "", null);
             row = pair(sheet, row, 2, "1.1", "中項目", "田中", null);
             pair(sheet, row, 3, "1.1.1", "小項目1", "菅原", null);
-            sheet.getRow(8).createCell(9).setCellValue(2.5);
+            sheet.getRow(8).createCell(10).setCellValue(2.5);
             try (OutputStream out = Files.newOutputStream(file)) {
                 workbook.write(out);
             }
@@ -363,10 +366,10 @@ class WbsWorkbookTest {
 
         try (XSSFWorkbook workbook = new XSSFWorkbook(Files.newInputStream(file))) {
             Sheet sheet = workbook.getSheetAt(0);
-            assertEquals("10月1日", sheet.getRow(1).getCell(5).getStringCellValue());
-            assertEquals(CellType.NUMERIC, sheet.getRow(1).getCell(6).getCellType());
-            assertEquals(3.0, sheet.getRow(8).getCell(9).getNumericCellValue(), 0.001);
-            assertEquals(CellType.FORMULA, sheet.getRow(1).getCell(9).getCellType());
+            assertEquals("10月1日", sheet.getRow(1).getCell(6).getStringCellValue());
+            assertEquals(CellType.NUMERIC, sheet.getRow(1).getCell(7).getCellType());
+            assertEquals(3.0, sheet.getRow(8).getCell(10).getNumericCellValue(), 0.001);
+            assertEquals(CellType.FORMULA, sheet.getRow(1).getCell(10).getCellType());
         }
     }
 
@@ -383,10 +386,10 @@ class WbsWorkbookTest {
             Row weeks = sheet.createRow(2);
             for (int i = 0; i < 2; i++) {
                 LocalDate date = LocalDate.of(2026, 10, 1).plusDays(i);
-                Cell dateCell = dates.createCell(5 + i);
+                Cell dateCell = dates.createCell(6 + i);
                 dateCell.setCellValue(date);
                 dateCell.setCellStyle(dateStyle);
-                Cell weekCell = weeks.createCell(5 + i);
+                Cell weekCell = weeks.createCell(6 + i);
                 weekCell.setCellValue(date);
                 weekCell.setCellStyle(weekStyle);
             }
@@ -395,8 +398,8 @@ class WbsWorkbookTest {
             plan.createCell(1).setCellValue("1");
             plan.createCell(2).setCellValue("作業");
             plan.createCell(3).setCellValue("菅原");
-            plan.createCell(4).setCellValue("予定");
-            sheet.createRow(4).createCell(4).setCellValue("実績");
+            plan.createCell(5).setCellValue("予定");
+            sheet.createRow(4).createCell(5).setCellValue("実績");
             try (OutputStream out = Files.newOutputStream(file)) {
                 workbook.write(out);
             }
@@ -435,8 +438,8 @@ class WbsWorkbookTest {
             LocalDate start = LocalDate.of(2026, 10, 1);
             for (int i = 0; i < 7; i++) {
                 LocalDate date = start.plusDays(i);
-                dates.createCell(5 + i).setCellValue(date.getMonthValue() + "月" + date.getDayOfMonth() + "日");
-                header.createCell(5 + i).setCellValue(JapaneseDates.weekday(date));
+                dates.createCell(6 + i).setCellValue(date.getMonthValue() + "月" + date.getDayOfMonth() + "日");
+                header.createCell(6 + i).setCellValue(JapaneseDates.weekday(date));
             }
             int row = 3;
             row = pair(sheet, row, 1, "1", "大項目", "", null);
@@ -465,11 +468,15 @@ class WbsWorkbookTest {
         if (!assignee.isEmpty()) {
             plan.createCell(3).setCellValue(assignee);
         }
-        plan.createCell(4).setCellValue("予定");
-        Row actualRow = sheet.createRow(row + 1);
-        actualRow.createCell(4).setCellValue("実績");
         if (actual != null) {
-            actualRow.createCell(8).setCellValue(actual);
+            plan.createCell(4).setCellValue(actual);
+        }
+        plan.createCell(5).setCellValue("予定");
+        Row actualRow = sheet.createRow(row + 1);
+        actualRow.createCell(5).setCellValue("実績");
+        if (actual != null) {
+            // Oct 4 when first date column is G (index 6): 6=1日,7=2日,8=3日,9=4日
+            actualRow.createCell(9).setCellValue(actual);
         }
         return row + 2;
     }

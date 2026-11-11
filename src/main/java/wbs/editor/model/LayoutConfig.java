@@ -13,8 +13,9 @@ public final class LayoutConfig {
     public int wbsColumn = 1;
     public int nameColumn = 2;
     public int assigneeColumn = 3;
-    public int kindColumn = 4;
-    public int firstDateColumn = 5;
+    public int totalHoursColumn = 4;
+    public int kindColumn = 5;
+    public int firstDateColumn = 6;
     public String planLabel = "予定";
     public String actualLabel = "実績";
 
@@ -29,8 +30,10 @@ public final class LayoutConfig {
         config.wbsColumn = Columns.parseOrDefault(settings.get("wbsColumn", "B"), defaults.wbsColumn);
         config.nameColumn = Columns.parseOrDefault(settings.get("nameColumn", "C"), defaults.nameColumn);
         config.assigneeColumn = Columns.parseOrDefault(settings.get("assigneeColumn", "D"), defaults.assigneeColumn);
-        config.kindColumn = Columns.parseOrDefault(settings.get("kindColumn", "E"), defaults.kindColumn);
-        config.firstDateColumn = Columns.parseOrDefault(settings.get("firstDateColumn", "F"), defaults.firstDateColumn);
+        config.totalHoursColumn = Columns.parseOrDefault(
+                settings.get("totalHoursColumn", "E"), defaults.totalHoursColumn);
+        config.kindColumn = Columns.parseOrDefault(settings.get("kindColumn", "F"), defaults.kindColumn);
+        config.firstDateColumn = Columns.parseOrDefault(settings.get("firstDateColumn", "G"), defaults.firstDateColumn);
         config.planLabel = settings.get("planLabel", defaults.planLabel);
         config.actualLabel = settings.get("actualLabel", defaults.actualLabel);
         if (config.planLabel.isBlank()) {
@@ -51,6 +54,7 @@ public final class LayoutConfig {
         settings.put("wbsColumn", Columns.name(wbsColumn));
         settings.put("nameColumn", Columns.name(nameColumn));
         settings.put("assigneeColumn", Columns.name(assigneeColumn));
+        settings.put("totalHoursColumn", Columns.name(totalHoursColumn));
         settings.put("kindColumn", Columns.name(kindColumn));
         settings.put("firstDateColumn", Columns.name(firstDateColumn));
         settings.put("planLabel", planLabel);
@@ -67,6 +71,7 @@ public final class LayoutConfig {
         copy.wbsColumn = wbsColumn;
         copy.nameColumn = nameColumn;
         copy.assigneeColumn = assigneeColumn;
+        copy.totalHoursColumn = totalHoursColumn;
         copy.kindColumn = kindColumn;
         copy.firstDateColumn = firstDateColumn;
         copy.planLabel = planLabel;
@@ -93,8 +98,9 @@ public final class LayoutConfig {
         if (planLabel.trim().equals(actualLabel.trim())) {
             return "予定と実績の文字は別にしてください。";
         }
-        int[] columns = {levelColumn, wbsColumn, nameColumn, assigneeColumn, kindColumn, firstDateColumn};
-        String[] labels = {"Level", "WBS No", "項目名", "担当", "予定／実績", "日付の開始列"};
+        int[] columns = {
+                levelColumn, wbsColumn, nameColumn, assigneeColumn, totalHoursColumn, kindColumn, firstDateColumn};
+        String[] labels = {"Level", "WBS No", "項目名", "担当", "工数合計", "予定／実績", "日付の開始列"};
         for (int i = 0; i < columns.length; i++) {
             if (columns[i] < 0) {
                 return labels[i] + "の列が不正です。";
@@ -119,6 +125,7 @@ public final class LayoutConfig {
                 + Columns.name(wbsColumn) + ":WBS  "
                 + Columns.name(nameColumn) + ":項目  "
                 + Columns.name(assigneeColumn) + ":担当  "
+                + Columns.name(totalHoursColumn) + ":工数合計  "
                 + Columns.name(kindColumn) + ":区分  日付 "
                 + Columns.name(firstDateColumn) + "列〜";
     }
