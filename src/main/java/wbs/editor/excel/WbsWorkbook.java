@@ -465,19 +465,10 @@ public final class WbsWorkbook implements AutoCloseable {
     }
 
     private Double readTotalHours(WbsItem item) {
-        if (layout.totalHoursColumn < 0) {
+        if (layout.totalHoursColumn < 0 || item.actualRow() < 0) {
             return null;
         }
-        int primary = item.planRow() >= 0 ? item.planRow() : item.actualRow();
-        if (primary < 0) {
-            return null;
-        }
-        Double value = readNumber(primary, layout.totalHoursColumn);
-        if (value == null && item.planRow() >= 0 && item.actualRow() >= 0) {
-            int other = primary == item.planRow() ? item.actualRow() : item.planRow();
-            value = readNumber(other, layout.totalHoursColumn);
-        }
-        return value;
+        return readNumber(item.actualRow(), layout.totalHoursColumn);
     }
 
     private boolean isCompanion(int current, int next) {

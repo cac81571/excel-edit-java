@@ -64,6 +64,44 @@ class WbsWorkbookTest {
     }
 
     @Test
+    void totalHoursReadsActualRowOnly() throws Exception {
+        Path file = temp.resolve("total-hours.xlsx");
+        try (XSSFWorkbook workbook = new XSSFWorkbook()) {
+            Sheet sheet = workbook.createSheet("WBS");
+            Row dates = sheet.createRow(1);
+            dates.createCell(6).setCellValue("10月4日");
+            sheet.createRow(2);
+            Row plan = sheet.createRow(3);
+            plan.createCell(0).setCellValue(3);
+            plan.createCell(1).setCellValue("1.1");
+            plan.createCell(2).setCellValue("項目");
+            plan.createCell(3).setCellValue("菅原");
+            plan.createCell(4).setCellValue(9.0); // 予定行は無視
+            plan.createCell(5).setCellValue("予定");
+            Row actual = sheet.createRow(4);
+            actual.createCell(4).setCellValue(3.5);
+            actual.createCell(5).setCellValue("実績");
+            actual.createCell(9).setCellValue(1.0);
+
+            Row planOnly = sheet.createRow(5);
+            planOnly.createCell(0).setCellValue(3);
+            planOnly.createCell(1).setCellValue("1.2");
+            planOnly.createCell(2).setCellValue("実績なし");
+            planOnly.createCell(3).setCellValue("菅原");
+            planOnly.createCell(4).setCellValue(7.0);
+            planOnly.createCell(5).setCellValue("予定");
+            try (OutputStream out = Files.newOutputStream(file)) {
+                workbook.write(out);
+            }
+        }
+        try (WbsWorkbook book = WbsWorkbook.open(file, new LayoutConfig())) {
+            book.loadDay(LocalDate.of(2026, 10, 4));
+            assertEquals(3.5, find(book, "1.1").totalHours(), 0.001);
+            assertNull(find(book, "1.2").totalHours());
+        }
+    }
+
+    @Test
     void hoursHistoryShowsOnlyDaysWithPlanOrActual() throws Exception {
         Path file = sampleLikeScreenshot(temp.resolve("history.xlsx"));
         LocalDate october4 = LocalDate.of(2026, 10, 4);
@@ -492,13 +530,12 @@ class WbsWorkbookTest {
         if (!assignee.isEmpty()) {
             plan.createCell(3).setCellValue(assignee);
         }
-        if (actual != null) {
-            plan.createCell(4).setCellValue(actual);
-        }
         plan.createCell(5).setCellValue("予定");
         Row actualRow = sheet.createRow(row + 1);
         actualRow.createCell(5).setCellValue("実績");
         if (actual != null) {
+            // 実績合計は実績行の E 列
+            actualRow.createCell(4).setCellValue(actual);
             // Oct 4 when first date column is G (index 6): 6=1日,7=2日,8=3日,9=4日
             actualRow.createCell(9).setCellValue(actual);
         }
