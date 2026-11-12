@@ -15,7 +15,7 @@ final class WbsTableModel extends AbstractTableModel {
     static final int COL_PLAN = 5;
     static final int COL_ACTUAL = 6;
 
-    private static final String[] HEADERS = {"Level", "WBS No", "項目名", "担当", "工数合計", "予定", "実績"};
+    private static final String[] HEADERS = {"Level", "WBS No", "項目名", "担当", "実績合計", "予定", "実績"};
 
     private List<WbsRow> rows = List.of();
 

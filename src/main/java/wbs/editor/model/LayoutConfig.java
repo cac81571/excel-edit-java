@@ -100,7 +100,7 @@ public final class LayoutConfig {
         }
         int[] columns = {
                 levelColumn, wbsColumn, nameColumn, assigneeColumn, totalHoursColumn, kindColumn, firstDateColumn};
-        String[] labels = {"Level", "WBS No", "項目名", "担当", "工数合計", "予定／実績", "日付の開始列"};
+        String[] labels = {"Level", "WBS No", "項目名", "担当", "実績合計", "予定／実績", "日付の開始列"};
         for (int i = 0; i < columns.length; i++) {
             if (columns[i] < 0) {
                 return labels[i] + "の列が不正です。";
@@ -125,7 +125,7 @@ public final class LayoutConfig {
                 + Columns.name(wbsColumn) + ":WBS  "
                 + Columns.name(nameColumn) + ":項目  "
                 + Columns.name(assigneeColumn) + ":担当  "
-                + Columns.name(totalHoursColumn) + ":工数合計  "
+                + Columns.name(totalHoursColumn) + ":実績合計  "
                 + Columns.name(kindColumn) + ":区分  日付 "
                 + Columns.name(firstDateColumn) + "列〜";
     }

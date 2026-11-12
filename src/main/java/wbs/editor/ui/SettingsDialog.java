@@ -59,7 +59,7 @@ final class SettingsDialog extends JDialog {
         JLabel explain = new JLabel("<html><body style='width:520px'>"
                 + "シート名と、各項目の行・列を指定します。行は 1 から、列は A や F、または 1 からの番号です。"
                 + "初期値は、日付が 2 行目、曜日が 3 行目、データが 4 行目、"
-                + "Level が A、WBS No が B、項目名が C、担当が D、工数合計が E、予定／実績が F、日付が G 列からです。"
+                + "Level が A、WBS No が B、項目名が C、担当が D、実績合計が E、予定／実績が F、日付が G 列からです。"
                 + "<br>各WBSは「予定」の行と、その次の「実績」の行を 1 件として読み書きします。"
                 + "</body></html>");
 
@@ -73,7 +73,7 @@ final class SettingsDialog extends JDialog {
         row = add(form, row, "WBS No", wbsField, null);
         row = add(form, row, "項目名", nameField, null);
         row = add(form, row, "担当", assigneeField, null);
-        row = add(form, row, "工数合計", totalHoursField, "表示のみ");
+        row = add(form, row, "実績合計", totalHoursField, "表示のみ");
         row = add(form, row, "予定／実績", kindField, "予定・実績と書いている列");
         row = add(form, row, "日付の開始列", dateColumnField, "この列から右へ日付が並びます");
         row = add(form, row, "予定と書く文字", planLabelField, null);

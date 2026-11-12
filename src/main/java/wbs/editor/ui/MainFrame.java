@@ -375,7 +375,7 @@ public final class MainFrame extends JFrame {
                     } else if (column >= WbsTableModel.COL_PLAN) {
                         label.setToolTipText("時間を入力します。空欄にするとクリアできます。");
                     } else if (column == WbsTableModel.COL_TOTAL_HOURS) {
-                        label.setToolTipText("Excelの工数合計列の値です（表示のみ）。");
+                        label.setToolTipText("Excelの実績合計列の値です（表示のみ）。");
                     } else {
                         label.setToolTipText(null);
                     }
@@ -398,7 +398,7 @@ public final class MainFrame extends JFrame {
                     return "時間を入力します。空欄にするとクリアできます。";
                 }
                 if (column == WbsTableModel.COL_TOTAL_HOURS) {
-                    return "Excelの工数合計列の値です（表示のみ）。";
+                    return "Excelの実績合計列の値です（表示のみ）。";
                 }
                 return null;
             }
