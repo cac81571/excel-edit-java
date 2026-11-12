@@ -198,6 +198,12 @@ public final class MainFrame extends JFrame {
         dateRow.add(assigneeBox);
         dateRow.add(new JLabel("日付"));
         dateRow.add(dateSpinner);
+        JButton calendarButton = new JButton("▼");
+        calendarButton.setMargin(new Insets(2, 6, 2, 6));
+        calendarButton.setToolTipText("カレンダーから日付を選択");
+        calendarButton.setFocusable(false);
+        calendarButton.addActionListener(event -> openDateCalendar(calendarButton));
+        dateRow.add(calendarButton);
         dateRow.add(weekdayLabel);
         dateRow.add(totalsLabel);
         dateRow.add(buttons);
@@ -916,6 +922,11 @@ public final class MainFrame extends JFrame {
             ex.printStackTrace();
             error("設定を保存できませんでした。\n" + message(ex));
         }
+    }
+
+    private void openDateCalendar(Component anchor) {
+        LocalDate selected = readSpinnerCommit();
+        DateCalendarPopup.show(anchor, selected, date -> dateSpinner.setValue(date));
     }
 
     private void setDate(LocalDate date) {
