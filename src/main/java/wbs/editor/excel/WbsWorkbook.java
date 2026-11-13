@@ -158,7 +158,6 @@ public final class WbsWorkbook implements AutoCloseable {
     }
 
     public void loadDay(LocalDate date) {
-        evaluator.clearAllCachedResultValues();
         OptionalInt column = columnOf(date);
         for (WbsItem item : items) {
             Double plan = column.isPresent() && item.planRow() >= 0
@@ -168,7 +167,14 @@ public final class WbsWorkbook implements AutoCloseable {
                     ? readNumber(item.actualRow(), column.getAsInt())
                     : null;
             item.load(plan, actual);
-            item.setTotalHours(readTotalHours(item));
+        }
+    }
+
+    /** Re-reads 実績合計 after saves so SUM formulas reflect written day values. */
+    public void refreshTotalHours() {
+        evaluator.clearAllCachedResultValues();
+        for (WbsItem item : items) {
+            item.setTotalHours(readTotalHours(item, true));
         }
     }
 
@@ -196,8 +202,8 @@ public final class WbsWorkbook implements AutoCloseable {
                 plan = item.plan();
                 actual = item.actual();
             } else {
-                plan = item.planRow() >= 0 ? readNumber(item.planRow(), column.column) : null;
-                actual = item.actualRow() >= 0 ? readNumber(item.actualRow(), column.column) : null;
+                plan = hasValue(item.planRow(), column.column) ? readNumber(item.planRow(), column.column) : null;
+                actual = hasValue(item.actualRow(), column.column) ? readNumber(item.actualRow(), column.column) : null;
             }
             if (plan == null && actual == null) {
                 continue;
@@ -465,10 +471,27 @@ public final class WbsWorkbook implements AutoCloseable {
     }
 
     private Double readTotalHours(WbsItem item) {
+        return readTotalHours(item, false);
+    }
+
+    private Double readTotalHours(WbsItem item, boolean forceEvaluate) {
         if (layout.totalHoursColumn < 0 || item.actualRow() < 0) {
             return null;
         }
-        return readNumber(item.actualRow(), layout.totalHoursColumn);
+        return readNumber(item.actualRow(), layout.totalHoursColumn, forceEvaluate);
+    }
+
+    private boolean hasValue(int rowIndex, int column) {
+        Cell cell = cell(rowIndex, column);
+        if (cell == null) {
+            return false;
+        }
+        return switch (cell.getCellType()) {
+            case BLANK -> false;
+            case STRING -> !cell.getStringCellValue().isBlank();
+            case FORMULA -> cell.getCachedFormulaResultType() != CellType.BLANK;
+            default -> true;
+        };
     }
 
     private boolean isCompanion(int current, int next) {
@@ -669,12 +692,22 @@ public final class WbsWorkbook implements AutoCloseable {
     }
 
     private Double readNumber(int rowIndex, int column) {
+        return readNumber(rowIndex, column, false);
+    }
+
+    private Double readNumber(int rowIndex, int column, boolean forceEvaluate) {
         Cell cell = cell(rowIndex, column);
         if (cell == null || cell.getCellType() == CellType.BLANK) {
             return null;
         }
         try {
             if (cell.getCellType() == CellType.FORMULA) {
+                if (!forceEvaluate) {
+                    Double cached = cachedFormulaNumber(cell);
+                    if (cached != null || cell.getCachedFormulaResultType() == CellType.BLANK) {
+                        return cached;
+                    }
+                }
                 CellValue value = evaluator.evaluate(cell);
                 if (value == null || value.getCellType() == CellType.BLANK) {
                     return null;
@@ -698,6 +731,21 @@ public final class WbsWorkbook implements AutoCloseable {
                 return text.isBlank() ? null : Hours.parse(text);
             }
         } catch (RuntimeException ignored) {
+            return null;
+        }
+        return null;
+    }
+
+    private static Double cachedFormulaNumber(Cell cell) {
+        CellType resultType = cell.getCachedFormulaResultType();
+        if (resultType == CellType.NUMERIC) {
+            return cell.getNumericCellValue();
+        }
+        if (resultType == CellType.STRING) {
+            String text = cell.getStringCellValue();
+            return text == null || text.isBlank() ? null : Hours.parse(text);
+        }
+        if (resultType == CellType.BLANK) {
             return null;
         }
         return null;

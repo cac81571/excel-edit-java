@@ -113,6 +113,7 @@ public final class MainFrame extends JFrame {
     private LocalDate currentDate = LocalDate.now();
     private boolean adjusting;
     private boolean suppressDateEvents;
+    private boolean refreshingTable;
     private String notice = "";
     private String[] rowHeaderLabels = new String[0];
 
@@ -282,19 +283,21 @@ public final class MainFrame extends JFrame {
             });
         }
         model.addTableModelListener(event -> {
+            if (refreshingTable) {
+                return;
+            }
             if (event.getType() == TableModelEvent.UPDATE && event.getColumn() >= 0) {
                 notice = "";
             }
             updateStatus();
             if (event.getType() == TableModelEvent.UPDATE
                     && (event.getColumn() == WbsTableModel.COL_PLAN
-                            || event.getColumn() == WbsTableModel.COL_ACTUAL
-                            || event.getColumn() < 0)) {
+                            || event.getColumn() == WbsTableModel.COL_ACTUAL)) {
                 refreshHoursHistory();
             }
         });
         table.getSelectionModel().addListSelectionListener(event -> {
-            if (!event.getValueIsAdjusting()) {
+            if (!event.getValueIsAdjusting() && !refreshingTable) {
                 updateStatus();
                 refreshHoursHistory();
             }
@@ -564,6 +567,8 @@ public final class MainFrame extends JFrame {
             try {
                 var backup = workbook.save(currentFile);
                 workbook.markClean();
+                workbook.refreshTotalHours();
+                refreshTable(false);
                 settings.put("lastAssignee", assigneeSettingValue());
                 persistSettings();
                 notice = "保存しました。";
@@ -676,23 +681,29 @@ public final class MainFrame extends JFrame {
     }
 
     private void refreshTable(boolean structureChanged) {
-        if (structureChanged) {
-            String person = assigneeFilterText();
-            String wbsNo = wbsFilterField.getText();
-            String nameKeyword = nameFilterField.getText();
-            model.setRows(workbook == null
-                    ? List.of()
-                    : WbsFilter.visible(
-                            workbook.items(),
-                            person,
-                            wbsNo,
-                            nameKeyword,
-                            actualOnlyBox.isSelected()));
-        } else {
-            model.refreshValues();
+        refreshingTable = true;
+        try {
+            if (structureChanged) {
+                String person = assigneeFilterText();
+                String wbsNo = wbsFilterField.getText();
+                String nameKeyword = nameFilterField.getText();
+                model.setRows(workbook == null
+                        ? List.of()
+                        : WbsFilter.visible(
+                                workbook.items(),
+                                person,
+                                wbsNo,
+                                nameKeyword,
+                                actualOnlyBox.isSelected()));
+            } else {
+                model.refreshValues();
+            }
+            refreshRowHeader();
+            updateStatus();
+        } finally {
+            refreshingTable = false;
         }
-        refreshRowHeader();
-        updateStatus();
+        refreshHoursHistory();
     }
 
     private void configureRowHeader() {
@@ -725,7 +736,6 @@ public final class MainFrame extends JFrame {
         rowHeader.setListData(labels);
         rowHeader.setFixedCellHeight(table.getRowHeight());
         rowHeader.setToolTipText("選択行のセル番号は Ctrl+C でコピーできます");
-        refreshHoursHistory();
     }
 
     private void refreshHoursHistory() {
