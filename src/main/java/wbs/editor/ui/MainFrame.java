@@ -11,8 +11,11 @@ import java.awt.Insets;
 import java.awt.Toolkit;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.StringSelection;
+import java.awt.datatransfer.Transferable;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.File;
@@ -317,22 +320,104 @@ public final class MainFrame extends JFrame {
             }
         });
         table.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0), "clearHours");
-        AbstractAction copyAddresses = new AbstractAction() {
+        installCopyActions();
+    }
+
+    private void installCopyActions() {
+        int menuMask = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
+        KeyStroke ctrlC = KeyStroke.getKeyStroke(KeyEvent.VK_C, menuMask);
+        KeyStroke ctrlShiftC = KeyStroke.getKeyStroke(KeyEvent.VK_C, menuMask | KeyEvent.SHIFT_DOWN_MASK);
+
+        AbstractAction copyValues = new AbstractAction("copy") {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent event) {
+                copySelectedCellValues();
+            }
+        };
+        AbstractAction copyAddresses = new AbstractAction("copyCellAddress") {
             @Override
             public void actionPerformed(java.awt.event.ActionEvent event) {
                 copySelectedCellAddresses();
             }
         };
-        table.getActionMap().put("copy", copyAddresses);
-        table.getInputMap(JComponent.WHEN_FOCUSED).put(
-                KeyStroke.getKeyStroke(KeyEvent.VK_C, Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()),
-                "copy");
+
+        table.getActionMap().put("copy", copyValues);
+        table.getActionMap().put("copyCellAddress", copyAddresses);
+        table.getInputMap(JComponent.WHEN_FOCUSED).put(ctrlC, "copy");
+        table.getInputMap(JComponent.WHEN_FOCUSED).put(ctrlShiftC, "copyCellAddress");
+        table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(ctrlShiftC, "copyCellAddress");
+
+        rowHeader.getActionMap().put("copy", copyAddresses);
+        rowHeader.getActionMap().put("copyCellAddress", copyAddresses);
+        rowHeader.getInputMap(JComponent.WHEN_FOCUSED).put(ctrlC, "copy");
+        rowHeader.getInputMap(JComponent.WHEN_FOCUSED).put(ctrlShiftC, "copyCellAddress");
+        rowHeader.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent event) {
+                int index = rowHeader.locationToIndex(event.getPoint());
+                if (index >= 0) {
+                    table.getSelectionModel().setSelectionInterval(index, index);
+                    rowHeader.requestFocusInWindow();
+                }
+            }
+        });
+    }
+
+    private void copySelectedCellValues() {
+        if (table.isEditing() && table.getEditorComponent() instanceof JTextField field) {
+            field.copy();
+            return;
+        }
+        String text = selectedCellValuesText();
+        if (text == null) {
+            return;
+        }
+        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text), null);
+        notice = "セルの内容をコピーしました。";
+        updateStatus();
     }
 
     private void copySelectedCellAddresses() {
+        String text = selectedCellAddressesText();
+        if (text == null) {
+            return;
+        }
+        int copied = text.split("\n", -1).length;
+        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text), null);
+        notice = copied == 1
+                ? "セル番号「" + text + "」をコピーしました。"
+                : "セル番号を " + copied + " 件コピーしました。";
+        updateStatus();
+    }
+
+    private String selectedCellValuesText() {
+        int[] rows = table.getSelectedRows();
+        int[] columns = table.getSelectedColumns();
+        if (rows.length == 0 || columns.length == 0) {
+            return null;
+        }
+        StringBuilder text = new StringBuilder();
+        for (int r = 0; r < rows.length; r++) {
+            if (r > 0) {
+                text.append('\n');
+            }
+            for (int c = 0; c < columns.length; c++) {
+                if (c > 0) {
+                    text.append('\t');
+                }
+                Object value = table.getValueAt(rows[r], columns[c]);
+                if (value != null) {
+                    text.append(value);
+                }
+            }
+        }
+        return text.toString();
+    }
+
+    private String selectedCellAddressesText() {
         int[] rows = table.getSelectedRows();
         if (rows.length == 0) {
-            return;
+            return null;
         }
         StringBuilder text = new StringBuilder();
         int copied = 0;
@@ -347,14 +432,7 @@ public final class MainFrame extends JFrame {
             text.append(address);
             copied++;
         }
-        if (copied == 0) {
-            return;
-        }
-        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text.toString()), null);
-        notice = copied == 1
-                ? "セル番号「" + text + "」をコピーしました。"
-                : "セル番号を " + copied + " 件コピーしました。";
-        updateStatus();
+        return copied == 0 ? null : text.toString();
     }
 
     private JTable createTable() {
@@ -713,7 +791,7 @@ public final class MainFrame extends JFrame {
         rowHeader.setForeground(HINT_FOREGROUND);
         rowHeader.setFont(table.getFont());
         rowHeader.setSelectionModel(table.getSelectionModel());
-        rowHeader.setFocusable(false);
+        rowHeader.setFocusable(true);
         DefaultListCellRenderer renderer = new DefaultListCellRenderer();
         renderer.setHorizontalAlignment(SwingConstants.RIGHT);
         renderer.setBorder(BorderFactory.createEmptyBorder(0, 4, 0, 8));
@@ -735,7 +813,7 @@ public final class MainFrame extends JFrame {
         rowHeaderLabels = labels;
         rowHeader.setListData(labels);
         rowHeader.setFixedCellHeight(table.getRowHeight());
-        rowHeader.setToolTipText("選択行のセル番号は Ctrl+C でコピーできます");
+        rowHeader.setToolTipText("選択行の Excel セル番号は Ctrl+Shift+C（左端クリック後は Ctrl+C）でコピーできます");
     }
 
     private void refreshHoursHistory() {
@@ -1139,6 +1217,20 @@ public final class MainFrame extends JFrame {
 
     private final class FileDropHandler extends TransferHandler {
         @Override
+        public int getSourceActions(JComponent component) {
+            return component == table ? COPY : NONE;
+        }
+
+        @Override
+        protected Transferable createTransferable(JComponent component) {
+            if (component != table) {
+                return null;
+            }
+            String text = selectedCellValuesText();
+            return text == null ? null : new StringSelection(text);
+        }
+
+        @Override
         public boolean canImport(TransferSupport support) {
             return support.isDataFlavorSupported(DataFlavor.javaFileListFlavor);
         }
@@ -1164,7 +1256,7 @@ public final class MainFrame extends JFrame {
         }
     }
 
-    private static final class HoursEditor extends DefaultCellEditor {
+    private final class HoursEditor extends DefaultCellEditor {
         private final JTextField field;
         private boolean replaceOnType = true;
         private boolean startedByKey;
@@ -1175,6 +1267,16 @@ public final class MainFrame extends JFrame {
             field.setHorizontalAlignment(JTextField.RIGHT);
             field.setBorder(BorderFactory.createEmptyBorder(0, 4, 0, 4));
             setClickCountToStart(1);
+            KeyStroke ctrlShiftC = KeyStroke.getKeyStroke(
+                    KeyEvent.VK_C,
+                    Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx() | KeyEvent.SHIFT_DOWN_MASK);
+            field.getInputMap(JComponent.WHEN_FOCUSED).put(ctrlShiftC, "copyCellAddress");
+            field.getActionMap().put("copyCellAddress", new AbstractAction() {
+                @Override
+                public void actionPerformed(java.awt.event.ActionEvent event) {
+                    copySelectedCellAddresses();
+                }
+            });
             field.addKeyListener(new java.awt.event.KeyAdapter() {
                 @Override
                 public void keyTyped(java.awt.event.KeyEvent event) {
